@@ -27,7 +27,7 @@ function hint(value, towardsCoarser, finerIsHigher) {
 /** All candidates for this profile, best first. `brews` = this profile's brews (any order). */
 export function nudgeCandidates({ brews, beans = [], now = Date.now() }) {
   const out = [];
-  const live = (brews ?? []).filter((b) => b && !b.deleted && b.beanId && finite(b.startedAt)).sort((a, b) => b.startedAt - a.startedAt);
+  const live = (brews ?? []).filter((b) => b && !b.deleted && !b.incomplete && b.beanId && finite(b.startedAt)).sort((a, b) => b.startedAt - a.startedAt);
   const last = live[0];
   const bean = last && beans.find((b) => b.id === last.beanId && !b.archived);
   if (!bean) return out;

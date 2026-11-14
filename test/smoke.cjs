@@ -299,6 +299,24 @@ const pw = require('playwright');
     await jp.reload();
     await jp.waitForSelector('.home-title');
     check(await jp.locator('.nudge[data-nudge^="dialled-"]').count() === 0, 'a dismissed nudge stays dismissed');
+    // An interrupted brew (saved by the Brew flow when a shot is left mid-way) is marked, and kept out of the trail and the advice
+    const [partialBean, partialId] = await jp.evaluate(async () => {
+      const { store } = window.dotScale;
+      const bean = (await store.list('bean'))[0];
+      const profile = (await store.list('profile')).sort((x, y) => x.createdAt - y.createdAt)[0];
+      const b = await store.put({ type: 'brew', profileId: profile.id, method: 'espresso', beanId: bean.id, incomplete: true, gear: {}, startedAt: Date.now(), dose: 16, targetYield: 32, yield: 9, ratio: 0.56, timeS: 6, grind: { value: 12 },
+        samples: { hz: 10, t0: 0, channels: { weight: [0, 1, 2, 3, 4, 5, 6], flow: [0, 1, 1, 1, 1, 1, 1] } } });
+      return [bean.id, b.id];
+    });
+    await jp.goto(url + '#/journal');
+    await jp.waitForSelector('[data-testid="brew-row"]');
+    check(await jp.locator('[data-testid="interrupted-tag"]').count() === 1, 'an interrupted brew is marked in the Journal list');
+    await jp.goto(url + `#/journal/bean/${partialBean}?method=espresso`);
+    await jp.waitForSelector('[data-testid="trail-shot"]');
+    check(await jp.locator('[data-testid="trail-shot"]').count() === 4 && await jp.locator('.dialled').count() === 1, 'the dial-in trail leaves the interrupted brew out');
+    await jp.goto(url + `#/journal/brew/${partialId}`);
+    await jp.waitForSelector('[data-testid="interrupted-tag"]');
+    check((await jp.locator('.verdict').innerText()).startsWith('Interrupted') && await jp.locator('.tip').count() === 0, 'an interrupted brew’s detail is marked, with a partial verdict and no advice');
     check(errors.length === 0, `no page errors in Journal/Learn${errors.length ? ': ' + errors.join('; ') : ''}`);
     await jctx.close();
   } catch (e) { check(false, 'journal/learn: ' + e.message.split('\n').slice(0, 3).join(' | ')); }

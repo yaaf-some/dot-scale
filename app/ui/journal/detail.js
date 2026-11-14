@@ -94,7 +94,7 @@ async function editBrew(ctx, brew, beans) {
 }
 
 async function chooseOther(ctx, brew, brews, beans) {
-  const others = brews.filter((b) => b.id !== brew.id && !b.deleted && b.profileId === brew.profileId)
+  const others = brews.filter((b) => b.id !== brew.id && !b.deleted && !b.incomplete && b.profileId === brew.profileId)
     .sort((a, b) => (b.method === brew.method) - (a.method === brew.method) || (b.beanId === brew.beanId) - (a.beanId === brew.beanId) || b.startedAt - a.startedAt).slice(0, 40);
   if (!others.length) { ctx.toast('You need a second brew to compare.'); return; }
   const res = await formDialog({
@@ -137,7 +137,8 @@ export async function mount(root, ctx, id) {
     back,
     h('header', { class: 'section' },
       h('h1', {}, brewTitle(brew, beans)),
-      h('p', { class: 'sub' }, [m.name, fullDate(brew.startedAt), clock(brew.startedAt), owner?.name].filter(Boolean).join(' · '), ' ', brew.legacy ? h('span', { class: 'tag' }, 'Earlier app') : null)),
+      h('p', { class: 'sub' }, [m.name, fullDate(brew.startedAt), clock(brew.startedAt), owner?.name].filter(Boolean).join(' · '), ' ', brew.legacy ? h('span', { class: 'tag' }, 'Earlier app') : null, brew.incomplete ? h('span', { class: 'tag', 'data-testid': 'interrupted-tag' }, 'Interrupted') : null)),
+    brew.incomplete ? h('p', { class: 'note' }, 'This brew was interrupted before it finished, so the numbers cover only the part that ran. It is left out of the dial-in trail and gets no advice.') : null,
     metricsGrid(brew, a),
     chart ?? h('p', { class: 'note' }, brew.legacy
       ? 'This brew was saved by the earlier version of Dot Scale, so there is no curve or taste, only the totals.'
@@ -149,7 +150,7 @@ export async function mount(root, ctx, id) {
       h('button', { class: 'btn primary', type: 'button', onclick: async () => { if (await editBrew(ctx, brew, beans)) ctx.navigate(`/journal/brew/${encodeURIComponent(brew.id)}`); } }, 'Edit'),
       h('button', { class: 'btn secondary', type: 'button', onclick: () => chooseOther(ctx, brew, brews, beans) }, 'Compare…'),
       bean ? h('a', { class: 'btn secondary', href: `#/journal/bean/${encodeURIComponent(bean.id)}?${new URLSearchParams({ method: brew.method, profile: brew.profileId ?? '' })}` }, 'Dial-in trail') : null,
-      h('a', { class: 'btn secondary', href: `#/brew/${encodeURIComponent(brew.method)}?brew=${encodeURIComponent(brew.id)}` }, 'Brew again'),
+      brew.incomplete ? null : h('a', { class: 'btn secondary', href: `#/brew/${encodeURIComponent(brew.method)}?brew=${encodeURIComponent(brew.id)}` }, 'Brew again'),
       h('button', { class: 'btn danger', type: 'button', onclick: async () => {
         if (!(await confirmDialog({ title: 'Delete this brew?', message: 'It will be removed from this device and the household.', confirmLabel: 'Delete', danger: true }))) return;
         const copy = brew;

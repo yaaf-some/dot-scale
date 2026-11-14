@@ -142,7 +142,8 @@ export const grindText = (b) => {
  *     dialledInId, dialledIn: boolean }
  */
 export function buildTrail(brews, { bean, method, analyzeFn = analyze } = {}) {
-  const list = (brews ?? []).filter((b) => b && !b.deleted && (!method || b.method === method)).sort((a, b) => -byNewest(a, b));
+  // interrupted brews are not trend points: they are neither dialled in nor a grind step to compare against
+  const list = (brews ?? []).filter((b) => b && !b.deleted && !b.incomplete && (!method || b.method === method)).sort((a, b) => -byNewest(a, b));
   const m = method ?? list[0]?.method ?? 'espresso';
   let dialledInId = null;
   try { dialledInId = findDialledIn(list, { method: m }); } catch { /* an odd record must not break the page */ }

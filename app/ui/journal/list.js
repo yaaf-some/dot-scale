@@ -17,7 +17,7 @@ function row(b, beans) {
   const s = stars(b);
   return h('a', { class: 'jrow', href: `#/journal/brew/${encodeURIComponent(b.id)}`, 'data-testid': 'brew-row' },
     h('span', { class: 'jrow-icon' }, icon(m.icon, { size: 22 })),
-    h('span', { class: 'jrow-main' }, h('span', { class: 'jrow-title' }, brewTitle(b, beans)), h('span', { class: 'jrow-sub' }, sub)),
+    h('span', { class: 'jrow-main' }, h('span', { class: 'jrow-title' }, brewTitle(b, beans)), h('span', { class: 'jrow-sub' }, sub, b.incomplete ? [' ', h('span', { class: 'tag', 'data-testid': 'interrupted-tag' }, 'Interrupted')] : null)),
     h('span', { class: 'jrow-end' }, sparkline(b), starsNode(s)));
 }
 
