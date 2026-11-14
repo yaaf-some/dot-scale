@@ -60,6 +60,11 @@ export const RULES = {
     // Normalise time to the target yield when a shot was stopped well short/long (linear, rough).
     projectIfOffByFraction: 0.1,
     projectClamp: [0.6, 1.6],
+    // Auto-started timers begin at the first drops (the scale can't see the pump), so shot time is missing the
+    // pump-to-first-drops lag. We add this estimate before comparing with `time`. UNVERIFIED for the EC260; tune it
+    // with real shots. Confidence in time-based grind tips is lowered a little to reflect the estimate.
+    autoStartLagS: 6,
+    autoStartConfidencePenalty: 0.1,
     yieldToleranceG: 2, // within this of the target counts as on target.
     // First drops: PRODUCT.md §8. No preinfusion control, so a long wait is informative.
     firstDrop: { weightG: 0.5, earlyBelowS: 5, lateAboveS: 12 },

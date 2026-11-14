@@ -383,3 +383,80 @@ test('cards are well formed', () => {
     if (c.diagram) assert.match(c.diagram, /^<svg[\s\S]*<\/svg>$/);
   }
 });
+
+// ---- brew-session record() shapes ------------------------------------------------------------
+// brew-session's record(): { method, dose, yield, targetYield, ratio, timeS, startSource, doneReason, samples,
+// firstDropS? (only when the user started the timer), stopLeadG, stopS, dripAfterStopG }.
+function sessionRecord(shot, source) {
+  const first = shot.samples.channels.weight.findIndex((x) => x >= 0.5);
+  const stopAbs = shot.timeS;
+  const base = {
+    method: 'espresso', dose: shot.dose, yield: shot.yield, targetYield: 32, ratio: Math.round((shot.yield / shot.dose) * 100) / 100,
+    startSource: source, doneReason: 'target', stopLeadG: 2, gear: shot.gear,
+  };
+  if (source === 'auto') {
+    const t0 = first / 10; // the timer starts at the first drops
+    return {
+      ...base, timeS: Math.round((stopAbs - t0) * 10) / 10, stopS: Math.round((stopAbs - t0) * 10) / 10,
+      dripAfterStopG: 1.5,
+      samples: { hz: 10, t0: 0, channels: { weight: shot.samples.channels.weight.slice(first), flow: shot.samples.channels.flow.slice(first) } },
+    };
+  }
+  return { ...base, timeS: stopAbs, stopS: stopAbs, firstDropS: first / 10, dripAfterStopG: 1.5, samples: shot.samples };
+}
+
+test('auto-start: good shot is judged on pump time, no false first-drops tip', () => {
+  const rec = sessionRecord(goodShot(), 'auto');
+  assert.ok(rec.timeS < 22, `auto timer ${rec.timeS}`); // would read "fast" without the lag
+  const r = analyze(rec);
+  assert.equal(r.metrics.firstDropS, null);
+  assert.equal(r.metrics.timeStatus, 'sweet');
+  assert.ok(!ids(r).some((i) => i.startsWith('first-drops')));
+  assert.match(r.verdict, /^Right on target: .* from first drops\.$/);
+  assert.ok(r.metrics.mainAvgFlow > 0.8, 'flow metrics still computed from t=0');
+});
+
+test('auto-start: a really fast shot is still fast and still gets grind finer', () => {
+  const r = analyze(sessionRecord(fastShot(), 'auto'));
+  assert.equal(r.metrics.timeStatus, 'fast');
+  assert.equal(top(r).id, 'grind-finer');
+  assert.ok(!ids(r).includes('first-drops-early'));
+  assert.match(top(r).why, /about \d+ s/i);
+});
+
+test('auto-start: confidence is a little lower than for a user-started timer', () => {
+  const auto = top(analyze(sessionRecord(fastShot(), 'auto')));
+  const user = top(analyze(sessionRecord(fastShot(), 'user')));
+  assert.ok(auto.confidence < user.confidence);
+});
+
+test('user-start: first drops come from the record and keep today\'s behaviour', () => {
+  const rec = sessionRecord(goodShot({ firstDropS: 3, stopAtG: 30, flowAt: (t) => 1.1 * Math.min(1, t / 3) }), 'user');
+  const r = analyze(rec);
+  assert.ok(r.metrics.firstDropS < 5);
+  assert.ok(ids(r).includes('first-drops-early'));
+  assert.doesNotMatch(r.verdict, /first drops\./);
+  // missing startSource behaves like a user start
+  const { startSource, ...noSource } = rec;
+  assert.equal(analyze(noSource).metrics.timeStatus, r.metrics.timeStatus);
+});
+
+test('auto-start: an explicit firstDropS wins over the samples', () => {
+  const r = analyze({ ...sessionRecord(goodShot(), 'auto'), firstDropS: 3 });
+  assert.equal(r.metrics.firstDropS, 3);
+  assert.ok(ids(r).includes('first-drops-early'));
+});
+
+test('auto-start lag is tunable and drip from the record is trusted', () => {
+  const rec = { ...sessionRecord(goodShot(), 'auto'), dripAfterStopG: 4 };
+  const rules = { ...RULES, espresso: { ...RULES.espresso, autoStartLagS: 0 } };
+  assert.equal(analyze(rec, { rules }).metrics.timeStatus, 'fast');
+  assert.equal(analyze(rec).metrics.dripAfterStopG, 4);
+  assert.ok(ids(analyze({ ...rec, yield: 34.5 })).includes('stop-early'));
+});
+
+test('auto-start history: previous auto shots use pump-equivalent time too', () => {
+  const prev = { ...sessionRecord(goodShot(), 'auto'), id: 'a', beanId: 'b1', startedAt: 1, taste: { balance: 0, stars: 4 } };
+  const cur = { ...sessionRecord(goodShot({ seed: 5 }), 'auto'), id: 'b', beanId: 'b1', startedAt: 2, taste: { balance: 0, stars: 5 } };
+  assert.equal(analyze(cur, { history: [prev] }).metrics.dialledIn, true);
+});

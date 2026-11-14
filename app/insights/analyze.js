@@ -178,7 +178,10 @@ function baseMetrics(brew, S, R) {
   const yieldG = num(brew.yield) ?? (finalW != null && finalW > 0 ? finalW : null);
   const stopFlow = R.espresso.main.stopFlowGps;
   const timeS = num(brew.timeS) ?? (S ? lastFlowTime(S, stopFlow) : null);
-  const firstDropS = num(brew.firstDropS) ?? (S ? firstWeightGain(S, R.espresso.firstDrop.weightG) : null);
+  // Auto-started espresso: the timer began at the first drops (the scale can't see the pump), so first drops can't
+  // be derived from the samples. An explicit brew.firstDropS is still trusted.
+  const auto = brew.startSource === 'auto';
+  const firstDropS = num(brew.firstDropS) ?? (S && !auto ? firstWeightGain(S, R.espresso.firstDrop.weightG) : null);
   return {
     dose,
     yield: yieldG,
@@ -186,6 +189,7 @@ function baseMetrics(brew, S, R) {
     ratio: dose > 0 && yieldG != null ? yieldG / dose : null,
     timeS,
     firstDropS,
+    autoStart: auto,
     hasSamples: !!S,
   };
 }
@@ -203,10 +207,14 @@ function espressoMetrics(brew, S, c) {
   const b = baseMetrics(brew, S, c.R);
   const m = { method: c.method, ...b };
 
+  // The time windows are pump-to-end. With an auto-started timer (first drops) the pump-to-first-drops lag is missing,
+  // so add an estimate (RULES.espresso.autoStartLagS, unverified for the EC260).
+  const lag = b.autoStart ? E.autoStartLagS : 0;
+  m.pumpTimeS = b.timeS != null ? b.timeS + lag : null;
   // Time normalised to the target yield, when the shot was stopped clearly short or long.
-  let eff = b.timeS;
+  let eff = m.pumpTimeS;
   if (eff != null && b.yield > 0 && b.targetYield > 0 && Math.abs(b.yield - b.targetYield) / b.targetYield > E.projectIfOffByFraction) {
-    eff = b.timeS * clamp(b.targetYield / b.yield, ...E.projectClamp);
+    eff = m.pumpTimeS * clamp(b.targetYield / b.yield, ...E.projectClamp);
   }
   m.effectiveTimeS = eff;
   m.timeStatus = classify(eff, E.time);
@@ -214,12 +222,16 @@ function espressoMetrics(brew, S, c) {
   m.avgFlow = b.timeS > 0 && b.yield != null ? b.yield / Math.max(1, b.timeS - (b.firstDropS ?? 0)) : null;
 
   Object.assign(m, { mainAvgFlow: null, mainPeakFlow: null, flowCV: null, spikeRatio: null, lateRamp: null, dripAfterStopG: null });
-  if (S && b.firstDropS != null && b.timeS != null) {
-    const ph = flowPhase(S, b.firstDropS + E.main.startAfterS, b.timeS - E.main.endTrimS, E.main);
+  // Flow phase starts at the first drops: the explicit/derived one, or t=0 when the timer itself started there.
+  const fd0 = b.firstDropS ?? (b.autoStart ? 0 : null);
+  const stopS = num(brew.stopS) ?? b.timeS;
+  if (S && fd0 != null && stopS != null) {
+    const ph = flowPhase(S, fd0 + E.main.startAfterS, stopS - E.main.endTrimS, E.main);
     if (ph) Object.assign(m, ph);
-    const stopIdx = S.indexOf(b.timeS);
+    const stopIdx = S.indexOf(stopS);
     if ((S.n - 1 - stopIdx) / S.hz >= E.drip.minSecondsAfterStop) m.dripAfterStopG = Math.max(0, S.w[S.n - 1] - S.w[stopIdx]);
   }
+  if (num(brew.dripAfterStopG) != null) m.dripAfterStopG = brew.dripAfterStopG; // measured by the brew session
   m.unstable =
     (m.flowCV != null && m.flowCV > E.stability.cvUnstable) || (m.spikeRatio != null && m.spikeRatio > E.stability.spikeRatio);
   m.beanAgeDays = beanAgeDays(brew, c.bean);
@@ -379,10 +391,14 @@ function grindSteps(dev, E) {
   return dev >= E.farOffS ? E.grindStepsFar : E.grindStepsNear;
 }
 
+// Shot time as shown to the user; an estimated pump-to-end time when the timer auto-started at the first drops.
+const showT = (mm) => (mm.autoStart && mm.pumpTimeS != null ? `about ${fmtTime(mm.pumpTimeS)}` : fmtTime(mm.timeS));
+
 function espressoTips(brew, m, taste, c, hist) {
   const E = c.R.espresso;
   const P = c.R.priority;
   const tips = [];
+  const penalty = m.autoStart ? E.autoStartConfidencePenalty : 0;
   const status = m.timeStatus;
   const timeDir = status === 'fast' ? 'finer' : status === 'slow' ? 'coarser' : null;
   const tasteDir = taste.sour && !taste.bitter ? 'finer' : taste.bitter && !taste.sour ? 'coarser' : null;
@@ -415,7 +431,7 @@ function espressoTips(brew, m, taste, c, hist) {
       id: 'dialled-in', variable: 'none', priority: P.dialledIn, confidence: 0.9, learnCard: LEARN.dialledIn,
       title: 'Dialled in: change nothing',
       change: 'Keep the same dose, grind and yield. Repeat it to lock it in.',
-      why: `Two shots in a row were in range and rated ${E.dialIn.minStars}+ (${fmtTime(prev.m.timeS)} and ${fmtTime(m.timeS)}).`,
+      why: `Two shots in a row were in range and rated ${E.dialIn.minStars}+ (${showT(prev.m)} and ${showT(m)}).`,
     }));
   }
 
@@ -423,7 +439,7 @@ function espressoTips(brew, m, taste, c, hist) {
     tips.push(mkTip({
       id: 'taste-wins', variable: 'none', priority: P.tasteWins, confidence: 0.8, learnCard: LEARN.tasteVsTime,
       title: 'Taste beats the clock',
-      change: `Keep this recipe. Note ${fmtTime(m.timeS)} as the time that works for these beans.`,
+      change: `Keep this recipe. Note ${showT(m)} as the time that works for these beans.`,
       why: `The shot ran ${status} (${fmtTime(eff)} against ${T.sweetFromS}-${T.sweetToS} s), but you rated it ${taste.stars} and it tasted balanced. Time ranges are starting points.`,
     }));
   }
@@ -473,11 +489,11 @@ function espressoTips(brew, m, taste, c, hist) {
     const gusher = timeDir === 'finer' && eff < T.gusherBelowS;
     const steps = gusher ? E.gusherSteps : grindSteps(dev, E);
     const agree = tasteDir === timeDir;
-    const conf = clamp((agree ? 0.88 : 0.75) + (streak + 1 >= E.history.streakForConfidence ? 0.05 : 0) - (fresh ? 0.15 : 0), 0.3, 0.95);
+    const conf = clamp((agree ? 0.88 : 0.75) - penalty + (streak + 1 >= E.history.streakForConfidence ? 0.05 : 0) - (fresh ? 0.15 : 0), 0.3, 0.95);
     const reasons = [];
     reasons.push(timeDir === 'finer'
-      ? `${fmtTime(m.timeS)} for ${fmtG(m.yield)} g is quick (aim for ${T.sweetFromS}-${T.sweetToS} s), so water had little time to dissolve the coffee`
-      : `${fmtTime(m.timeS)} for ${fmtG(m.yield)} g is slow (aim for ${T.sweetFromS}-${T.sweetToS} s), so the water stayed in contact too long`);
+      ? `${showT(m)} for ${fmtG(m.yield)} g is quick (aim for ${T.sweetFromS}-${T.sweetToS} s), so water had little time to dissolve the coffee`
+      : `${showT(m)} for ${fmtG(m.yield)} g is slow (aim for ${T.sweetFromS}-${T.sweetToS} s), so the water stayed in contact too long`);
     if (agree) reasons.push(`it tasted ${timeDir === 'finer' ? 'sour' : 'bitter'}, which agrees`);
     if (streak + 1 >= E.history.streakForConfidence) reasons.push(`this is the ${streak + 1}${streak + 1 === 3 ? 'rd' : 'th'} ${status} shot in a row on these beans`);
     if (timeDir === 'coarser' && fdLate) reasons.push(`first drops took ${r1(m.firstDropS)} s, which also points to a grind that is too fine`);
@@ -547,7 +563,7 @@ function espressoTips(brew, m, taste, c, hist) {
         learnCard: sour ? LEARN.fastSour : LEARN.slowBitter,
         title: sour ? 'Sour and on the quick side: grind slightly finer' : 'Bitter and on the slow side: grind slightly coarser',
         change: `${after}Go 1 step ${tasteDir}${suggestValue(tasteDir, 1, curVal, finerIsHigher)}; same dose and yield.`,
-        why: `Time (${fmtTime(m.timeS)}) is in range but towards the ${sour ? 'fast' : 'slow'} end, and taste says ${sour ? 'under' : 'over'}-extracted.`,
+        why: `Time (${showT(m)}) is in range but towards the ${sour ? 'fast' : 'slow'} end, and taste says ${sour ? 'under' : 'over'}-extracted.`,
       }));
     } else if (yNow != null && m.dose > 0) {
       const newY = sour ? yNow + Y : yNow - Y;
@@ -556,7 +572,7 @@ function espressoTips(brew, m, taste, c, hist) {
         learnCard: LEARN.sourBitter,
         title: sour ? 'Sour: run the shot a little longer' : 'Bitter: stop the shot a little sooner',
         change: `${after}Stop at about ${fmtG(newY)} g (1:${r1(newY / m.dose)}) with the same grind.`,
-        why: `The time (${fmtTime(m.timeS)}) is fine, so the grind isn't the problem. ${sour ? 'More water through the puck dissolves more of the sweeter, rounder flavours' : 'Cutting the shot earlier leaves out the harsh late flavours'}.`,
+        why: `The time (${showT(m)}) is fine, so the grind isn't the problem. ${sour ? 'More water through the puck dissolves more of the sweeter, rounder flavours' : 'Cutting the shot earlier leaves out the harsh late flavours'}.`,
       }));
     }
   } else if (!timeDir && !tasteDir && !both && taste.strength && m.yield != null && m.dose > 0 && m.timeStatus) {
@@ -576,7 +592,7 @@ function espressoTips(brew, m, taste, c, hist) {
       id: 'history-inconsistent', variable: 'puck', priority: P.timeGrind - 1, confidence: 0.6, learnCard: LEARN.puckPrep,
       title: 'Same grind, different time: make your prep repeatable',
       change: 'Weigh the dose to 0.1 g and use the same distribution and tamp every time.',
-      why: `With the same grind setting the time went ${fmtTime(prev.m.timeS)} then ${fmtTime(m.timeS)}.`,
+      why: `With the same grind setting the time went ${showT(prev.m)} then ${showT(m)}.`,
     }));
   }
 
@@ -825,10 +841,11 @@ function finalizeTips(tips, R) {
 function verdictFor(m, c) {
   const y = m.yield != null ? `${fmtG(m.yield)} g` : null;
   if (m.timeS == null) return y ? `Saved ${y}; no timing was recorded.` : 'Not enough data to judge this brew.';
-  const tail = `${y ? `${y} in ` : ''}${fmtTime(m.timeS)}.`;
+  let tail = `${y ? `${y} in ` : ''}${fmtTime(m.timeS)}.`;
   switch (c.family) {
     case 'espresso': {
       const label = { fast: 'Ran fast', slow: 'Ran slow', sweet: 'Right on target', ok: 'In range' }[m.timeStatus];
+      if (m.autoStart) tail = `${y ? `${y} in ` : ''}${fmtTime(m.timeS)} from first drops.`;
       if (m.unstable) return m.timeStatus === 'fast' || m.timeStatus === 'slow' ? `${label} and uneven: ${tail}` : `Time was fine but the flow was uneven: ${tail}`;
       return `${label}: ${tail}`;
     }
