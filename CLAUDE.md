@@ -5,9 +5,10 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 
 ## Layout
 - `protocol.js` — BLE frame builder, CRC-16/MODBUS, streaming parser. Pure ES module, no DOM.
+- `history.js` — brew history: entry shape, migration of old `dot.history` entries, merge/dedupe, downsampling, JSON/CSV export. Pure, no DOM.
 - `index.html` — the whole UI: markup, CSS and app logic in one `<script type="module">`.
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737). `serve.ps1` is the Windows equivalent.
-- `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
+- `test/*.test.mjs` — unit tests for `protocol.js` and `history.js` (`node:test`).
 - `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
 - `.vercelignore` keeps tests/scripts out of the deployment.
 

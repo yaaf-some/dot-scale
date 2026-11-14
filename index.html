@@ -82,6 +82,22 @@
           border-radius: 10px; padding: 10px 12px; font-variant-numeric: tabular-nums; }
   .shot .when { color: var(--muted); font-size: 12px; }
   .shot button { grid-row: span 2; align-self: center; }
+  .shot .open { all: unset; cursor: pointer; display: grid; gap: 2px; min-width: 0; }
+  .shot .open:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+  .shot .tags { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+  dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 16px; color: var(--text);
+           background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  dialog::backdrop { background: rgb(0 0 0 / .55); }
+  dialog h3 { margin: 0; font-size: 17px; flex: 1; }
+  dialog .stats { margin: 12px 0; grid-template-columns: repeat(4, 1fr); }
+  dialog .stat b { font-size: 20px; }
+  dialog canvas { margin-bottom: 4px; }
+  textarea { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+             border-radius: 10px; padding: 10px 12px; width: 100%; min-height: 60px; resize: vertical; }
+  select { font: inherit; font-size: 16px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+           border-radius: 10px; padding: 10px 12px; width: 100%; }
 
   details > summary { cursor: pointer; color: var(--muted); font-size: 13px; text-transform: uppercase;
                       letter-spacing: .08em; font-weight: 600; list-style: none; }
@@ -161,7 +177,44 @@
       <button id="saveBtn" class="small">Save this brew</button>
     </div>
     <div id="history" class="history"><p class="muted" style="margin:0">Saved brews appear here. They're stored only in this browser.</p></div>
+    <div class="history-tools">
+      <button id="exportJsonBtn" class="small">Export JSON</button>
+      <button id="exportCsvBtn" class="small">Export CSV</button>
+      <button id="importBtn" class="small">Import JSON…</button>
+      <input id="importFile" type="file" accept=".json,application/json" class="hidden">
+    </div>
+    <p id="historyMsg" class="muted" style="margin:8px 0 0" role="status"></p>
   </section>
+
+  <dialog id="brewDialog" aria-labelledby="brewTitle">
+    <form method="dialog" id="brewForm">
+      <div class="row">
+        <h3 id="brewTitle">Brew</h3>
+        <button id="brewClose" type="button" class="small" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="muted" id="brewWhen"></div>
+      <div class="stats">
+        <div class="stat"><b id="brewDose">–</b><span>Dose g</span></div>
+        <div class="stat"><b id="brewOut">–</b><span>Out g</span></div>
+        <div class="stat"><b id="brewRatio">–</b><span>Ratio</span></div>
+        <div class="stat"><b id="brewTime">–</b><span>Time</span></div>
+      </div>
+      <canvas id="brewChart"></canvas>
+      <p id="brewNoGraph" class="muted hidden" style="margin:8px 0">No pour graph was saved with this brew.</p>
+      <div class="row" style="margin-top:10px">
+        <label class="field">Bean<input id="noteBean" type="text" maxlength="120" placeholder="e.g. Kenya AA" style="font-size:16px"></label>
+        <label class="field">Grind<input id="noteGrind" type="text" maxlength="60" placeholder="e.g. 18 clicks" style="font-size:16px"></label>
+        <label class="field" style="max-width:120px">Rating<select id="noteRating">
+          <option value="">–</option><option value="1">★</option><option value="2">★★</option>
+          <option value="3">★★★</option><option value="4">★★★★</option><option value="5">★★★★★</option></select></label>
+      </div>
+      <label class="field" style="margin-top:10px">Notes<textarea id="noteText" maxlength="500" placeholder="Taste, water, anything else"></textarea></label>
+      <div class="row" style="margin-top:12px; justify-content:space-between">
+        <button id="brewDelete" type="button" class="small danger">Delete brew</button>
+        <button id="brewSave" value="save" class="small primary">Save notes</button>
+      </div>
+    </form>
+  </dialog>
 
   <section class="card">
     <details id="deviceDetails">
@@ -197,11 +250,12 @@
 
 <script type="module">
 import { SERVICE, CHAR_NOTIFY, CHAR_WRITE, DEVICE_INFO, OP, CMD, TIMER, commands, frame, Parser, hex } from './protocol.js';
+import { migrate, mergeHistory, downsample, samplesToSeries, toCSV, toExport, parseImport, entryId, MAX_ENTRIES } from './history.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
   get(k, d) { try { const v = localStorage.getItem('dot.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('dot.' + k, JSON.stringify(v)); } catch {} },
+  set(k, v) { try { localStorage.setItem('dot.' + k, JSON.stringify(v)); return true; } catch { return false; } },
 };
 
 const state = {
@@ -482,10 +536,10 @@ function beep() {
 function drawChart() {
   if (chartPending) return;
   chartPending = true;
-  requestAnimationFrame(() => { chartPending = false; paintChart(); });
+  requestAnimationFrame(() => { chartPending = false; paintChart($('chart'), state.series, +$('targetOut').value || 0); });
 }
-function paintChart() {
-  const c = $('chart'), dpr = devicePixelRatio || 1;
+function paintChart(c, s, target) {
+  const dpr = devicePixelRatio || 1;
   const W = c.clientWidth, H = c.clientHeight;
   if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
   const ctx = c.getContext('2d');
@@ -493,7 +547,6 @@ function paintChart() {
   ctx.clearRect(0, 0, W, H);
   const css = getComputedStyle(document.documentElement);
   const col = (v) => css.getPropertyValue(v).trim();
-  const s = state.series, target = +$('targetOut').value || 0;
   const tMax = Math.max(30, s.length ? s[s.length - 1].t : 0);
   const wMax = Math.max(target * 1.1, 50, ...s.map((p) => p.w));
   const fMax = Math.max(8, ...s.map((p) => p.f));
@@ -527,33 +580,142 @@ function paintChart() {
   line('f', yf, col('--accent-2'));
   line('w', yw, col('--accent'));
 }
-addEventListener('resize', drawChart);
+addEventListener('resize', () => { drawChart(); if ($('brewDialog').open) paintBrewChart(); });
 
 // ---------- history ----------
+// Shape, migration, merge and export live in history.js (unit-tested).
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const stars = (n) => '★'.repeat(n);
+function loadHistory() { return migrate(store.get('history', [])); }
+function saveHistory(list) { return store.set('history', list); }
+{ // one-time migration of v1 entries (adds ids); a no-op when already current
+  const raw = store.get('history', []), list = migrate(raw);
+  if (JSON.stringify(raw) !== JSON.stringify(list)) saveHistory(list);
+}
+function historyMsg(text) { $('historyMsg').textContent = text; }
+
 function renderHistory() {
-  const list = store.get('history', []);
+  const list = loadHistory();
   const el = $('history');
-  if (!list.length) { el.innerHTML = '<p class="muted" style="margin:0">Saved brews appear here. They\'re stored only in this browser.</p>'; return; }
+  for (const id of ['exportJsonBtn', 'exportCsvBtn']) $(id).disabled = !list.length;
+  if (!list.length) { el.innerHTML = '<p class="muted" style="margin:0">Saved brews appear here. They\'re stored only in this browser, so export them now and then.</p>'; return; }
   el.innerHTML = '';
-  list.slice().reverse().forEach((b, idx) => {
+  for (const b of list.slice().reverse()) {
+    const n = b.notes || {};
+    const tags = [n.bean, n.grind, n.rating && stars(n.rating), b.samples && '📈'].filter(Boolean).map(esc).join(' · ');
     const d = document.createElement('div');
     d.className = 'shot';
-    d.innerHTML = `<div><b>${b.dose}g → ${b.out}g</b> · 1:${(b.out / b.dose).toFixed(1)} · ${fmtTime(b.time)}</div>
-      <button class="small" title="Delete">✕</button>
-      <div class="when">${new Date(b.at).toLocaleString()}</div>`;
-    d.querySelector('button').onclick = () => {
-      const all = store.get('history', []); all.splice(all.length - 1 - idx, 1); store.set('history', all); renderHistory();
-    };
+    d.dataset.id = b.id;
+    d.innerHTML = `<button type="button" class="open" title="Show details">
+        <div><b>${esc(b.dose)}g → ${esc(b.out)}g</b> · 1:${(b.out / b.dose).toFixed(1)} · ${fmtTime(b.time)}</div>
+        <div class="when">${esc(new Date(b.at).toLocaleString())}</div>
+        ${tags ? `<div class="tags">${tags}</div>` : ''}
+      </button>
+      <button class="small del" title="Delete" aria-label="Delete brew">✕</button>`;
+    d.querySelector('.open').onclick = () => openBrew(b.id);
+    d.querySelector('.del').onclick = () => deleteBrew(b.id);
     el.appendChild(d);
-  });
+  }
 }
+function deleteBrew(id) {
+  if (!confirm('Delete this brew from history?')) return false;
+  saveHistory(loadHistory().filter((e) => e.id !== id)); renderHistory(); return true;
+}
+
 $('saveBtn').onclick = () => {
   const dose = +$('dose').value || 0;
   if (state.grams <= 0 || dose <= 0) return alert('Nothing to save yet: set a dose and brew first.');
-  const all = store.get('history', []);
-  all.push({ at: Date.now(), dose, out: +state.grams.toFixed(1), time: state.seconds });
-  store.set('history', all.slice(-100));
+  const entry = { at: Date.now(), dose, out: +state.grams.toFixed(1), time: state.seconds, target: +$('targetOut').value || 0 };
+  entry.id = entryId(entry);
+  const samples = downsample(state.series);
+  if (samples.length) entry.samples = samples;
+  const list = mergeHistory(loadHistory(), [entry]);
+  if (!saveHistory(list)) {
+    // Storage full: keep the brew, drop its graph.
+    delete entry.samples;
+    if (!saveHistory(mergeHistory(loadHistory(), [entry]))) return alert('Could not save: this browser\'s storage is full.');
+    historyMsg('Saved without the pour graph: storage is full.');
+  } else historyMsg('');
   renderHistory();
+  openBrew(entry.id);
+};
+
+// ---------- brew details ----------
+let openId = null;
+function openBrew(id) {
+  const b = loadHistory().find((e) => e.id === id);
+  if (!b) return;
+  openId = id;
+  const n = b.notes || {};
+  $('brewTitle').textContent = n.bean || 'Brew';
+  $('brewWhen').textContent = new Date(b.at).toLocaleString();
+  $('brewDose').textContent = b.dose; $('brewOut').textContent = b.out;
+  $('brewRatio').textContent = b.dose > 0 ? '1:' + (b.out / b.dose).toFixed(1) : '–';
+  $('brewTime').textContent = fmtTime(b.time);
+  $('noteBean').value = n.bean || ''; $('noteGrind').value = n.grind || '';
+  $('noteRating').value = n.rating || ''; $('noteText').value = n.text || '';
+  $('brewChart').classList.toggle('hidden', !b.samples);
+  $('brewNoGraph').classList.toggle('hidden', !!b.samples);
+  $('brewDialog').showModal();
+  paintBrewChart();
+}
+function paintBrewChart() {
+  const b = loadHistory().find((e) => e.id === openId);
+  if (b?.samples) paintChart($('brewChart'), samplesToSeries(b.samples), b.target || 0);
+}
+$('brewDialog').addEventListener('close', () => {
+  if ($('brewDialog').returnValue === 'save' && openId) {
+    const list = loadHistory(), b = list.find((e) => e.id === openId);
+    if (b) {
+      b.notes = { bean: $('noteBean').value, grind: $('noteGrind').value, rating: $('noteRating').value, text: $('noteText').value };
+      b.updated = Date.now();
+      saveHistory(mergeHistory([], list)); // normalises notes (drops empty fields)
+      renderHistory();
+    }
+  }
+  $('brewDialog').returnValue = ''; openId = null;
+});
+$('brewClose').onclick = () => $('brewDialog').close();
+$('brewDelete').onclick = () => { if (deleteBrew(openId)) $('brewDialog').close(); };
+
+// ---------- export / import ----------
+function download(name, text, type) {
+  const file = new File([text], name, { type });
+  // iOS browsers (Bluefy) ignore <a download>; use the share sheet there. Unverified on hardware.
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && navigator.canShare?.({ files: [file] }))
+    return navigator.share({ files: [file] }).catch(() => {});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+$('exportJsonBtn').onclick = () => {
+  const list = loadHistory();
+  download(`dot-scale-history-${stamp()}.json`, JSON.stringify(toExport(list), null, 1), 'application/json');
+  historyMsg(`Exported ${list.length} brew${list.length === 1 ? '' : 's'}.`);
+};
+$('exportCsvBtn').onclick = () => {
+  download(`dot-scale-history-${stamp()}.csv`, toCSV(loadHistory()), 'text/csv');
+  historyMsg('Exported CSV (for spreadsheets; import needs the JSON file).');
+};
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async () => {
+  const f = $('importFile').files[0];
+  $('importFile').value = '';
+  if (!f) return;
+  try {
+    const incoming = parseImport(await f.text());
+    const before = loadHistory();
+    const all = mergeHistory(before, incoming, Infinity);
+    const list = all.slice(-MAX_ENTRIES);
+    if (!saveHistory(list)) throw new Error('this browser\'s storage is full');
+    const known = new Set(before.map((e) => e.id));
+    const added = new Set(incoming.map((e) => e.id).filter((id) => !known.has(id))).size;
+    historyMsg(`Imported ${incoming.length} brew${incoming.length === 1 ? '' : 's'}: ${added} new` +
+      (all.length > list.length ? `, kept the newest ${MAX_ENTRIES}` : '') + '.');
+    renderHistory();
+  } catch (e) { historyMsg('Import failed: ' + e.message); }
 };
 renderHistory();
 

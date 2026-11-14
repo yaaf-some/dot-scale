@@ -35,7 +35,8 @@ On any always-on machine running `serve.ps1` (or any static server on port 8737)
 - Brew recipe with dose, ratio and target, a progress bar, and a beep at the target
 - The timer can start automatically when you start pouring
 - Pour graph of weight and flow
-- Brew history, stored in this browser only
+- Brew history, stored in this browser: tap a brew for its pour graph and notes (bean, grind, rating);
+  export as JSON or CSV, and import a JSON export (duplicates are merged)
 - Scale settings: rename, power off, forget old app pairing, factory reset
 - Debug log with raw frames, and a raw command sender
 - **Demo mode**: a simulated scale that speaks the same protocol, so you can try the app without hardware
@@ -45,10 +46,11 @@ On any always-on machine running `serve.ps1` (or any static server on port 8737)
 | File | What it is |
 |---|---|
 | `protocol.js` | Frame builder, CRC-16/MODBUS, streaming parser. Command bytes match frames verified on real hardware. |
+| `history.js` | Brew history shape, migration, merge, downsampling, JSON/CSV export |
 | `index.html` | The app UI |
 | `serve.ps1` | Small local web server for Windows (no dependencies) |
 | `scripts/serve.mjs` | The same server in Node (`npm run serve`) |
-| `test/` | Protocol unit tests (`npm test`) and a Demo-mode browser smoke test (`npm run smoke`) |
+| `test/` | Protocol and history unit tests (`npm test`) and a Demo-mode browser smoke test (`npm run smoke`) |
 
 ## Protocol notes
 
