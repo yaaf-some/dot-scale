@@ -2,6 +2,8 @@
 
 Static web app for the Timemore Dot (TES017) Bluetooth scale. No build step, no dependencies.
 Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deploys to production**.
+Moving to Cloudflare (Worker + static assets, https://coffee.yaafsome.fyi): config is in `wrangler.jsonc`, `_headers` and
+`.assetsignore`; owner steps and the cutover are in `docs/DEPLOY.md`. The API is a Cloudflare Worker in `worker/`; don't add an `api/` folder (Vercel would treat it as functions).
 
 ## Read first
 - **`docs/PRODUCT.md`** is the product spec and the contracts between modules (data model, insights, sync). Follow it;
@@ -30,7 +32,11 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
   (`node scripts/screenshots.cjs` regenerates them).
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737).
 - `test/*.test.mjs` — unit tests (`node:test`). `test/smoke.cjs` — Playwright smoke test through the shell and Demo mode.
-- `.vercelignore` keeps tests/scripts/docs out of the deployment.
+- `.vercelignore` keeps tests/scripts/docs (and the Cloudflare-only files) out of the Vercel deployment.
+- `worker/` — Cloudflare Worker (household sync API); `worker/storage.js` is the only file that touches the database (D1).
+  `migrations/` is the D1 schema. Sync docs: `docs/SYNC.md`; owner steps: `docs/DEPLOY.md`.
+- `app/sync/client.js` — household sync client (needs the store contract in `docs/SYNC.md`).
+- `.assetsignore` is the same idea for Cloudflare: anything not listed there is **publicly served**, so add new private files to it.
 
 ## View contract (add a screen without touching the shell)
 A route `#/<name>/<param>…?<query>` loads `app/ui/views/<name>.js`:
@@ -51,7 +57,7 @@ export async function mount(root, ctx) { /* fill `root`; optionally return a cle
 - Seed records use fixed ids and `updatedAt: 1` (see `seeds.js`); don't re-seed with random ids.
 
 ## Commands
-- `npm test` — unit tests
+- `npm test` — unit tests (Node 22.13+: the sync tests use the built-in `node:sqlite`)
 - `npm run smoke` — browser smoke test (`SCREENSHOT=/path.png npm run smoke` to capture the page)
 - `npm run check` — both. **Run before every push.**
 

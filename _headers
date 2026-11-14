@@ -1,0 +1,15 @@
+# Security headers for the static app (Workers static assets). Anything an API/Worker returns sets its own headers.
+#
+# CSP: the app shell has NO inline script and NO inline style (one external module script, external CSS files, no style=""
+# attributes in markup or innerHTML), so script-src and style-src are plain 'self'. JS setting element.style.x = ... is allowed
+# by CSP. If you ever need an inline script or style, prefer an external file; test/hosting.test.mjs fails if the CSP would
+# block what index.html or app/ does, and fails if 'unsafe-inline' is added without anything needing it.
+# connect-src 'self': the app only talks to its own origin (the sync API at /api).
+/*
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: bluetooth=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), interest-cohort=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
