@@ -59,7 +59,7 @@ domain. This is how you try the new app on Cloudflare while Vercel still serves 
 
 0. Leave non-production builds **off** unless you want staging. If you turn them on, set the allow-list below **first**.
 1. Dashboard → **Workers & Pages → dot-scale → Settings → Builds → Branch control**: turn builds for non-production branches
-   **on** (non-production deploy command: `npx wrangler versions upload`, the default) and **restrict them to a short allow-list
+   **on** (the default non-production deploy command is now `npx wrangler preview`, which needs the empty `"previews": {}` block that `wrangler.jsonc` already has; without it the build fails with "missing a `previews` block") and **restrict them to a short allow-list
    of branches you trust** (for example just the integration branch), not "all branches". This repository is public: a preview
    build runs that branch's code on your Cloudflare account with the same bindings as production (including the D1 database once
    it exists). As far as I know, only branches pushed to this repository are built (not pull requests from forks); check that

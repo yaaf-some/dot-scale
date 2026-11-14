@@ -69,6 +69,7 @@ test('wrangler.jsonc: Worker + assets from the repo root; only /api/* runs the W
     assert.notEqual(cfg.d1_databases[0].database_id, 'REPLACE_WITH_D1_DATABASE_ID', 'D1 is enabled but the id is still the placeholder');
   }
   assert.match(cfg.compatibility_date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(cfg.previews && typeof cfg.previews === 'object', 'Workers Builds runs `wrangler preview` on non-production branches, which needs a previews block');
 });
 
 test('Vercel keeps deploying the static app and ignores the Cloudflare-only files', () => {

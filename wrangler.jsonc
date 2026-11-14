@@ -25,7 +25,11 @@
   // ],
 
   // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
-  "workers_dev": true
+  "workers_dev": true,
+
+  // Workers Builds builds every non-production branch with `wrangler preview`, which refuses to run without this block.
+  // An empty block is enough; production deploys (`wrangler deploy` on main) ignore it.
+  "previews": {}
 
   // Custom domain: add coffee.yaafsome.fyi in the dashboard AFTER removing the old Vercel CNAME (docs/DEPLOY.md, step 4).
   // To pin it in this file instead, add (only once that DNS record is gone, or the deploy fails):
