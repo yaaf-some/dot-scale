@@ -85,7 +85,12 @@ Worker rules:
 1. Branch from the integration branch, open a **draft** PR targeting it, and subscribe to your own PR's activity.
 2. CI red is yours to fix, root cause first. Never skip or delete a test to get green.
 3. If the PR conflicts, merge the integration branch into yours (never rebase or force-push shared history).
-4. When the work is done and CI is green, run `/code-review` on your own diff and fix what it finds, then mark the PR **ready for review** and say so in one line to the controller.
+4. When the work is done and CI is green, do a quick self-review of your own diff (read it once: leftovers, edge cases, public-repo rules) and mark the PR
+   **ready for review** with one line to the controller. **Do not run the `/code-review` skill by default**: it is heavy and eats the owner's
+   usage window. Run it (at `medium`, never above) only when the PR touches something risky: auth/sync/server code, the store or data migrations,
+   the brew session state machine, or import/parsing of untrusted input. The controller does a targeted review of every PR anyway.
+6. **Keep PRs few.** One PR per workstream. Fold follow-ups and fixes into your open PR instead of opening small new ones; a tiny
+   change that can wait goes into the next PR for that area.
 5. Don't wait for the owner. Questions that block you go to the controller (`send_message` to `@parent`), not the owner.
 
 Controller rules: review each ready PR (checks plus an integration test across modules, not only that PR's own tests), send fixes
