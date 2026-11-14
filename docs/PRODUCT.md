@@ -123,12 +123,14 @@ Profile { id, type:'profile', name, color, emoji, methods: string[] /* ordered m
           defaults?: { machineId?, grinderId?, portafilter?: 'naked'|'spouted', basketG? } }
 Gear    { id, type:'gear', kind:'espresso-machine'|'grinder'|'brewer'|'basket'|'portafilter', name, props:{}, updatedAt }
 Bean    { id, type:'bean', name, roaster, roastDate?: 'YYYY-MM-DD', process?, origin?, notes?, archived?, updatedAt }
-Recipe  { id, type:'recipe', profileId, method, name, dose, yield, ratio, tempC?, grind?:{text, value?}, steps?:Step[], favorite?, updatedAt }
+Recipe  { id, type:'recipe', profileId, method, name, dose, yield, ratio, tempC?, grind?:{text, value?}, steps?:Step[], portafilter?:'naked'|'spouted', beanId?, favorite?, updatedAt }
 Brew    { id, type:'brew', profileId, method, recipeId?, beanId?, gear:{machine?, grinder?, portafilter?:'naked'|'spouted', basketG?},
           startedAt, dose, yield, targetYield, ratio, timeS, firstDropS?, grind?:{text, value?}, tempC?,
           samples: { hz: 10, t0: 0, channels: { weight: number[], flow: number[] /* future: pressure, temp */ } },
           metrics: {...from insights}, insights: {...from insights}, taste?: {balance:-2..2, strength:-2..2, stars:1..5, spurts?:bool},
-          notes?, updatedAt }
+          notes?, updatedAt,
+          incomplete?: true /* a shot interrupted mid-brew (Back, tab, page hidden), kept so nothing is lost; the finished brew replaces it */,
+          /* from the brew session, all optional: */ startSource?:'auto'|'manual', doneReason?, stopS?, dripAfterStopG?, stopLeadG?, stepLog?, pourEndS?, water? }
 Step    { kind:'bloom'|'pour'|'wait'|'stir'|'press'|'plunge'|'swirl'|'heat', targetG?, atS?, durationS?, label }
 ```
 `samples` are stored downsampled to 10 Hz (a 40 s shot is ~800 numbers). Curves from before the migration may be absent; the UI must handle that.

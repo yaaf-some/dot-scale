@@ -2,3 +2,4 @@
 // never means touching main.js. Example:  import './sync/settings-section.js';
 import './sync/settings-section.js';
 import './ui/journal-nudges.js';
+import './ui/brew/settings-section.js';
