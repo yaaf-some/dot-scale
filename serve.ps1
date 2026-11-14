@@ -6,7 +6,7 @@ param([int]$Port = 8737, [switch]$Open)
 $root = (Resolve-Path $PSScriptRoot).Path
 $types = @{ '.html' = 'text/html; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml';
             '.webmanifest' = 'application/manifest+json'; '.css' = 'text/css; charset=utf-8'; '.json' = 'application/json';
-            '.md' = 'text/plain; charset=utf-8' }
+            '.md' = 'text/plain; charset=utf-8'; '.png' = 'image/png' }
 
 # Plain TCP listener: unlike HttpListener it doesn't reject proxied requests whose Host isn't "localhost".
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
