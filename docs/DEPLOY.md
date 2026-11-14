@@ -13,10 +13,12 @@ of steps 4-5 matters.
 
 ## 1. How this reaches production
 
-This work lands on the **integration branch** (`claude/admiring-brahmagupta-2rovr3`), not on `main`. `main` is production and
-only changes at the single release PR, so `wrangler.jsonc` is not on `main` until then and Vercel keeps serving the live site
-exactly as before in the meantime (`.vercelignore` excludes the Cloudflare-only files). To try the new app on Cloudflare
-before the release, use the staging steps (section "Try the integration branch on your phone", below).
+The new app lives on the **integration branch** (`claude/admiring-brahmagupta-2rovr3`), not on `main`. `main` is production and
+only changes at the single release PR. A first, minimal Cloudflare config (assets-only, for the *current* app) is already on
+`main`; this branch replaces it with the full config (Worker API, D1 binding, strict security headers) at release. Until you
+disconnect Vercel, it keeps serving the live site. To try the new app on Cloudflare before the release, use the staging steps
+(section "Try the integration branch on your phone", below). Because this branch binds a D1 database, the preview build needs
+the database to exist first: create it and put its id in `wrangler.jsonc` (section "Household sync").
 
 ## 2. Connect the GitHub repo (Workers Builds)
 
