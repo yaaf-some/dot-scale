@@ -172,7 +172,7 @@ function readTaste(t) {
 }
 
 // ---------- metrics ----------------------------------------------------------------------------
-function baseMetrics(brew, S, R) {
+function baseMetrics(brew, S, R, autoStart = false) {
   const dose = num(brew.dose);
   const finalW = S ? S.w[S.n - 1] : null;
   const yieldG = num(brew.yield) ?? (finalW != null && finalW > 0 ? finalW : null);
@@ -180,7 +180,7 @@ function baseMetrics(brew, S, R) {
   const timeS = num(brew.timeS) ?? (S ? lastFlowTime(S, stopFlow) : null);
   // Auto-started espresso: the timer began at the first drops (the scale can't see the pump), so first drops can't
   // be derived from the samples. An explicit brew.firstDropS is still trusted.
-  const auto = brew.startSource === 'auto';
+  const auto = autoStart && brew.startSource === 'auto';
   const firstDropS = num(brew.firstDropS) ?? (S && !auto ? firstWeightGain(S, R.espresso.firstDrop.weightG) : null);
   return {
     dose,
@@ -204,7 +204,7 @@ function classify(effT, T) {
 
 function espressoMetrics(brew, S, c) {
   const E = c.R.espresso;
-  const b = baseMetrics(brew, S, c.R);
+  const b = baseMetrics(brew, S, c.R, true);
   const m = { method: c.method, ...b };
 
   // The time windows are pump-to-end. With an auto-started timer (first drops) the pump-to-first-drops lag is missing,
@@ -224,7 +224,7 @@ function espressoMetrics(brew, S, c) {
   Object.assign(m, { mainAvgFlow: null, mainPeakFlow: null, flowCV: null, spikeRatio: null, lateRamp: null, dripAfterStopG: null });
   // Flow phase starts at the first drops: the explicit/derived one, or t=0 when the timer itself started there.
   const fd0 = b.firstDropS ?? (b.autoStart ? 0 : null);
-  const stopS = num(brew.stopS) ?? b.timeS;
+  const stopS = b.timeS;
   if (S && fd0 != null && stopS != null) {
     const ph = flowPhase(S, fd0 + E.main.startAfterS, stopS - E.main.endTrimS, E.main);
     if (ph) Object.assign(m, ph);
@@ -398,7 +398,7 @@ function espressoTips(brew, m, taste, c, hist) {
   const E = c.R.espresso;
   const P = c.R.priority;
   const tips = [];
-  const penalty = m.autoStart ? E.autoStartConfidencePenalty : 0;
+  const est = (x) => (m.autoStart ? `about ${fmtTime(x)}` : fmtTime(x));
   const status = m.timeStatus;
   const timeDir = status === 'fast' ? 'finer' : status === 'slow' ? 'coarser' : null;
   const tasteDir = taste.sour && !taste.bitter ? 'finer' : taste.bitter && !taste.sour ? 'coarser' : null;
@@ -440,7 +440,7 @@ function espressoTips(brew, m, taste, c, hist) {
       id: 'taste-wins', variable: 'none', priority: P.tasteWins, confidence: 0.8, learnCard: LEARN.tasteVsTime,
       title: 'Taste beats the clock',
       change: `Keep this recipe. Note ${showT(m)} as the time that works for these beans.`,
-      why: `The shot ran ${status} (${fmtTime(eff)} against ${T.sweetFromS}-${T.sweetToS} s), but you rated it ${taste.stars} and it tasted balanced. Time ranges are starting points.`,
+      why: `The shot ran ${status} (${est(eff)} against ${T.sweetFromS}-${T.sweetToS} s), but you rated it ${taste.stars} and it tasted balanced. Time ranges are starting points.`,
     }));
   }
 
@@ -489,7 +489,7 @@ function espressoTips(brew, m, taste, c, hist) {
     const gusher = timeDir === 'finer' && eff < T.gusherBelowS;
     const steps = gusher ? E.gusherSteps : grindSteps(dev, E);
     const agree = tasteDir === timeDir;
-    const conf = clamp((agree ? 0.88 : 0.75) - penalty + (streak + 1 >= E.history.streakForConfidence ? 0.05 : 0) - (fresh ? 0.15 : 0), 0.3, 0.95);
+    const conf = clamp((agree ? 0.88 : 0.75) + (streak + 1 >= E.history.streakForConfidence ? 0.05 : 0) - (fresh ? 0.15 : 0), 0.3, 0.95);
     const reasons = [];
     reasons.push(timeDir === 'finer'
       ? `${showT(m)} for ${fmtG(m.yield)} g is quick (aim for ${T.sweetFromS}-${T.sweetToS} s), so water had little time to dissolve the coffee`
@@ -516,7 +516,7 @@ function espressoTips(brew, m, taste, c, hist) {
       const exp = went === 'finer' ? 1 : -1;
       const prevDir = pr.m.timeStatus === 'fast' ? 'finer' : pr.m.timeStatus === 'slow' ? 'coarser' : null;
       const H = E.history;
-      const times = `${fmtTime(pr.m.effectiveTimeS)} to ${fmtTime(eff)}`;
+      const times = `${est(pr.m.effectiveTimeS)} to ${est(eff)}`;
       if (went) {
         if (tchg * exp <= -H.meaningfulTimeChangeS) {
           tips.push(mkTip({
@@ -587,7 +587,7 @@ function espressoTips(brew, m, taste, c, hist) {
   }
 
   // History: same grind but a very different time means preparation wasn't repeatable.
-  if (prev && hist.finerSteps === 0 && m.timeS != null && prev.m.timeS != null && Math.abs(m.timeS - prev.m.timeS) >= E.history.sameGrindTimeSwingS && !puckPrep) {
+  if (prev && hist.finerSteps === 0 && m.pumpTimeS != null && prev.m.pumpTimeS != null && Math.abs(m.pumpTimeS - prev.m.pumpTimeS) >= E.history.sameGrindTimeSwingS && !puckPrep) {
     tips.push(mkTip({
       id: 'history-inconsistent', variable: 'puck', priority: P.timeGrind - 1, confidence: 0.6, learnCard: LEARN.puckPrep,
       title: 'Same grind, different time: make your prep repeatable',
@@ -673,6 +673,8 @@ function espressoTips(brew, m, taste, c, hist) {
       }));
     }
   }
+  // Every time-based tip leans on the estimated lag, so lower them all a little.
+  if (m.autoStart) for (const x of tips) x.confidence = r2(Math.max(0.3, x.confidence - E.autoStartConfidencePenalty));
   return tips;
 }
 

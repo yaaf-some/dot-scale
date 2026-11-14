@@ -460,3 +460,28 @@ test('auto-start history: previous auto shots use pump-equivalent time too', () 
   const cur = { ...sessionRecord(goodShot({ seed: 5 }), 'auto'), id: 'b', beanId: 'b1', startedAt: 2, taste: { balance: 0, stars: 5 } };
   assert.equal(analyze(cur, { history: [prev] }).metrics.dialledIn, true);
 });
+
+test('auto-start only changes espresso: moka keeps its flow metrics', () => {
+  const b = pourTimeline({ method: 'moka', dose: 17, pours: [[20, 120, 40], [120, 150, 40]], totalS: 160 });
+  const r = analyze({ ...b, startSource: 'auto' });
+  assert.ok(r.metrics.firstDropS > 0);
+  assert.ok(r.metrics.lateRamp >= RULES.moka.lateRamp.spurtRatio);
+});
+
+test('auto-start: every tip is less confident than for the same shot started by hand', () => {
+  const mk = (src) => analyze({ ...sessionRecord(fastShot(), src), taste: { balance: -1, stars: 2 } });
+  const [a, u] = [mk('auto'), mk('user')];
+  assert.equal(top(a).id, top(u).id);
+  assert.ok(top(a).confidence < top(u).confidence);
+  const tw = (src) => analyze({ ...sessionRecord(fastShot(), src), taste: { balance: 0, stars: 5 } }).tips[0];
+  assert.equal(tw('auto').id, 'taste-wins');
+  assert.ok(tw('auto').confidence < tw('user').confidence);
+  assert.match(tw('auto').why, /about \d+ s/);
+});
+
+test('mixed manual and auto history compares on the pump-time basis', () => {
+  const manual = { ...goodShot(), id: 'm', beanId: 'b1', startedAt: 1, grind: { value: 13 } };
+  const auto = { ...sessionRecord(goodShot({ seed: 4 }), 'auto'), id: 'a', beanId: 'b1', startedAt: 2, grind: { value: 13 } };
+  const r = analyze(auto, { history: [manual] });
+  assert.ok(!ids(r).includes('history-inconsistent'), ids(r).join());
+});
