@@ -17,7 +17,7 @@ export function seedRecords() {
   return [
     { ...base, id: SEED_IDS.yaaf, type: 'profile', name: 'Yaaf', color: PROFILE_COLORS[0], emoji: '☕', methods: [],
       defaults: { machineId: SEED_IDS.machine, portafilter: 'naked', basketG: 16 } },
-    { ...base, id: SEED_IDS.alexa, type: 'profile', name: 'Alexa', color: PROFILE_COLORS[2], emoji: '🌱', methods: [],
+    { ...base, createdAt: 2, id: SEED_IDS.alexa, type: 'profile', name: 'Alexa', color: PROFILE_COLORS[2], emoji: '🌱', methods: [],
       defaults: { machineId: SEED_IDS.machine, portafilter: 'spouted', basketG: 16 } },
     { ...base, id: SEED_IDS.machine, type: 'gear', kind: 'espresso-machine', name: 'De’Longhi Stilosa EC260',
       props: { groupMm: 51, pumpBar: 15, pressureGauge: false, tempControl: false, preinfusionControl: false } },

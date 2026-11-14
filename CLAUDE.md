@@ -12,13 +12,37 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
   Safari lacks. If you can, also run the smoke test in Playwright WebKit (`npx playwright install webkit` may be blocked;
   if so, say so in your PR).
 
-## Layout (current; moving to the `app/` structure in PRODUCT.md §11)
+## Layout
+- `index.html` — thin shell: head, tokens, `<nav id="tabs">`, `<main id="view">`, `<script type="module" src="app/main.js">`.
+- `app/main.js` — boot, hash router, view mounting. `app/modules.js` — side-effect imports for feature modules.
+- `app/core/` — `store.js` (IndexedDB records + sync hooks, adapters in `store-adapters.js`), `bootstrap.js` + `seeds.js`
+  (first-run seeds and the localStorage migration), `scale.js` (BLE + auto-reconnect), `demo-scale.js` (simulator), `events.js`.
+- `app/ui/` — `tokens.css` (all design tokens), `app.css` (layout + components), `components.js`, `dialog.js`, `editors.js`,
+  `scale-line.js`, `nudges.js`, `settings-sections.js`, `router.js`, `theme.js`, and `views/<name>.js`.
 - `protocol.js` — BLE frame builder, CRC-16/MODBUS, streaming parser. Pure ES module, no DOM.
-- `index.html` — the whole UI: markup, CSS and app logic in one `<script type="module">`.
+- `docs/DESIGN.md` — design direction and token rationale. `docs/design/*.png` — reference screenshots
+  (`node scripts/screenshots.cjs` regenerates them).
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737). `serve.ps1` is the Windows equivalent.
-- `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
-- `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
-- `.vercelignore` keeps tests/scripts out of the deployment.
+- `test/*.test.mjs` — unit tests (`node:test`). `test/smoke.cjs` — Playwright smoke test through the shell and Demo mode.
+- `.vercelignore` keeps tests/scripts/docs out of the deployment.
+
+## View contract (add a screen without touching the shell)
+A route `#/<name>/<param>…?<query>` loads `app/ui/views/<name>.js`:
+```js
+export const meta = { title: 'Journal', chrome: 'tabs' /* or 'none' for full-screen flows */, keepOnProfileChange: false };
+export async function mount(root, ctx) { /* fill `root`; optionally return a cleanup function */ }
+```
+`ctx` = `{ store, scale, prefs, profile, profiles, route, params, query, signal, navigate(path, {replace}), setProfile(id), setTitle(t), toast(msg, {action}) }`.
+- `profile` is a snapshot of the active profile; the shell re-mounts the view when profiles or the active profile change
+  (Home also re-mounts when recipes, brews or beans change). Opt out with `meta.keepOnProfileChange`.
+- Subscribe with the signal so nothing leaks: `store.on('change', fn, { signal: ctx.signal })`,
+  `scale.on('weight', fn, { signal: ctx.signal })`. Views never touch `navigator.bluetooth`; use `scale`.
+- Build DOM with `h()` from `ui/dom.js` (never `innerHTML` with user data). Reuse `components.js` and `dialog.js`; take colours,
+  spacing and radii from `tokens.css` variables only.
+- Extension points that need no shell edits: `registerSettingsSection()` (settings-sections.js), `registerNudge()` (nudges.js, one
+  nudge on Home). Import your module from `app/modules.js`. A new *tab* is the only thing that edits `TABS` in `main.js`.
+- Stubs to replace: `brew.js`, `journal.js`, `learn.js` (keep `meta`, and the empty state until real content exists).
+- Seed records use fixed ids and `updatedAt: 1` (see `seeds.js`); don't re-seed with random ids.
 
 ## Commands
 - `npm test` — unit tests
@@ -26,11 +50,12 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 - `npm run check` — both. **Run before every push.**
 
 ## Rules
+- PWA/offline: PR #2 (`sw.js`, icons) predates this layout. When it merges, precache `app/**` and `protocol.js` and bump `VERSION`.
 - No real scale in the cloud: verify UI changes through **Demo mode**, which speaks the real protocol.
-  If you add a protocol feature, teach the demo simulator in `index.html` to answer it.
+  If you add a protocol feature, teach `app/core/demo-scale.js` to answer it.
 - Keep zero runtime dependencies and no build step. Only third-party scripts from pinned CDN URLs, if ever.
 - Protocol facts come from Timemore's open-scale-protocol; mark anything unverified on hardware as such.
-- Data lives in `localStorage` under the `dot.` prefix (`store.get/set`). Don't break existing keys
-  (`recipe`, `autoStart`, `beep`, `history`) — migrate instead.
+- Data lives in IndexedDB through `app/core/store.js` (records per PRODUCT.md §6); device-local settings go in `store.prefs`.
+  The old `dot.*` localStorage keys are only read once by the migration and are left in place.
 - Must work at phone and iPad sizes, in Bluefy (iOS) and Chrome (Android, desktop).
 - Work on your own branch, open a **draft PR** to `main`; keep PRs small and focused. Never push to `main`.

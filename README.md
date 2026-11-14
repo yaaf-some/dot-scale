@@ -45,7 +45,8 @@ On any always-on machine running `serve.ps1` (or any static server on port 8737)
 | File | What it is |
 |---|---|
 | `protocol.js` | Frame builder, CRC-16/MODBUS, streaming parser. Command bytes match frames verified on real hardware. |
-| `index.html` | The app UI |
+| `index.html` | Thin app shell |
+| `app/` | The app: `core/` (store, scale, demo), `ui/` (tokens, components, views). See `CLAUDE.md` |
 | `serve.ps1` | Small local web server for Windows (no dependencies) |
 | `scripts/serve.mjs` | The same server in Node (`npm run serve`) |
 | `test/` | Protocol unit tests (`npm test`) and a Demo-mode browser smoke test (`npm run smoke`) |
