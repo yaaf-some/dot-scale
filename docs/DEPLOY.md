@@ -62,6 +62,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.work
 Workers Builds builds non-production branches as **preview versions** with their own URL, without touching production or your
 domain.
 
+0. Leave non-production builds **off** unless you want staging. If you turn them on, set the allow-list below **first**.
 1. **Workers & Pages → dot-scale → Settings → Builds → Branch control**: turn builds for non-production branches **on**
    (non-production deploy command `npx wrangler versions upload`, the default) and **restrict them to a short allow-list of
    branches you trust** (for example just the one you want to try), not "all branches". This repository is public: a preview
@@ -91,7 +92,8 @@ Then do the real cutover in one sitting, at a quiet time, in this order:
 
 1. **Write down** the current record: Cloudflare dashboard → `yaafsome.fyi` → **DNS → Records** → the CNAME `coffee` (its target, a
    `vercel-dns.com` name, DNS only). You need it only if you roll back.
-2. **Delete** that CNAME. From this moment `coffee.yaafsome.fyi` is down until step 3 finishes (`dot-scale.vercel.app` keeps working).
+2. **Delete** that CNAME. (If the dashboard offers to replace the existing record when you add the custom domain in step 3, that does
+   the same thing in one step and shortens the downtime; I couldn't test whether it does.) From this moment `coffee.yaafsome.fyi` is down until step 3 finishes (`dot-scale.vercel.app` keeps working).
 3. Dashboard → **Workers & Pages → dot-scale → Settings → Domains & Routes → Add → Custom domain** → `coffee.yaafsome.fyi` → Add.
    Cloudflare creates the DNS record and a certificate; this usually takes a minute or a few.
 4. Check: open https://coffee.yaafsome.fyi and repeat the header and 404 checks from step 2 against it.
