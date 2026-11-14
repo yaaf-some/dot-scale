@@ -137,9 +137,8 @@ Step    { kind:'bloom'|'pour'|'wait'|'stir'|'press'|'plunge'|'swirl'|'heat', tar
 
 ## 7. Sync (household) and hosting
 
-**Decision (owner, Nov 14 2026):** host everything on **Cloudflare** (domain `yaafsome.fyi`, app at `coffee.yaafsome.fyi`)
-instead of Vercel, because the owner prefers Cloudflare's security. The owner chose "Host it all on Cloudflare" when asked.
-The live site stays on Vercel until the owner cuts over; nothing here may break Vercel's static deploy of `main` before then.
+**Hosting:** everything runs on **Cloudflare** (domain `yaafsome.fyi`, app at `coffee.yaafsome.fyi`): static assets plus one Worker,
+deployed from `main` by Workers Builds (`docs/DEPLOY.md`).
 
 - **Local-first:** the app works fully offline; sync runs in the background when online.
 - **Household code:** the first device creates a household and shows a code (e.g. `maple-tiger-orbit-river-4271`: 4 words + 4 digits,
@@ -147,16 +146,14 @@ The live site stays on Vercel until the owner cuts over; nothing here may break 
   required `SYNC_PEPPER` secret (the API answers 503 "not set up" until it is set). Profiles live inside the household.
 - **Backend:** a Cloudflare Worker (`worker/index.js`, no npm dependencies) serving the static app through Workers static assets and
   handling `/api/*`. Storage is **D1 (SQLite)**, not KV: sync needs a strictly increasing per-household `rev`, which KV's eventual
-  consistency can't give. All storage sits behind one small adapter with an in-memory fake for tests. No `api/` directory (Vercel would
-  treat it as functions).
+  consistency can't give. All storage sits behind one small adapter with an in-memory fake for tests.
 - **API:** `POST /api/household` → `{ code }`; `POST /api/sync` with `Authorization: Bearer <code>` and body `{ since, changes }` →
   `{ rev, changes, more, accepted, rejected, reset }`. Merge per record by last-writer-wins on `updatedAt` (ties by id); deletes are
   tombstones (the server keeps only the envelope). The response is paged (`more` → call again with `since = rev`), `rejected` lists
   records refused with a reason, and `reset` means the server lost its data so the client re-pushes everything. Limits: 1 MB per
   request, 15 records per request, 256 KB per record, 20k records per household, rate limit by household hash. Details, the
   storage adapter and the store contract (`changesSince`/`applyRemote`) are in `docs/SYNC.md`.
-- **Security:** `_headers` with HSTS, nosniff, referrer policy, a CSP as tight as the shell allows (`'unsafe-inline'` is acceptable
-  temporarily until the new shell removes inline scripts/styles; tighten afterwards) and a Permissions-Policy that keeps Bluetooth for
+- **Security:** `_headers` with HSTS, nosniff, referrer policy, a strict CSP (`script-src 'self'`, `style-src 'self'`: the shell has no inline script or style) and a Permissions-Policy that keeps Bluetooth for
   the app itself. Never log codes or tokens. Cloudflare Access is optional later (it would interrupt the installed app).
 - **Deploy:** Cloudflare Workers Builds from GitHub; steps in `docs/DEPLOY.md`. The owner performs the dashboard steps.
 

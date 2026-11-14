@@ -530,8 +530,7 @@ test('API responses are never cacheable and carry nosniff', async () => {
   }
 });
 
-test('no api/ directory (Vercel would treat it as functions) and no Node-only APIs in the worker', () => {
-  assert.throws(() => readdirSync(new URL('../api/', import.meta.url)), /ENOENT/);
+test('no Node-only APIs in the worker', () => {
   for (const f of readdirSync(new URL('../worker/', import.meta.url))) {
     const src = readFileSync(new URL(`../worker/${f}`, import.meta.url), 'utf8');
     assert.ok(!/from 'node:|require\(|Buffer\.|process\.env/.test(src), `${f} must run on Workers without nodejs_compat`);

@@ -1,5 +1,5 @@
 // Guards for the Cloudflare static hosting config (no Cloudflare needed): private files stay private,
-// security headers stay in place, and Vercel's deploy keeps ignoring the Cloudflare-only files.
+// and security headers stay in place.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
@@ -15,7 +15,7 @@ const ignoredAtRootOnly = (name) => lines('.assetsignore').includes(`/${name}`);
 
 test('.assetsignore keeps private files out of the public site, and not the app itself', () => {
   for (const must of ['.git', '.claude', '.env*', 'node_modules', 'test', 'docs', 'scripts', 'worker', 'migrations',
-    'wrangler.jsonc', 'package.json', 'CLAUDE.md', '.assetsignore', '.vercelignore', '.github']) {
+    'wrangler.jsonc', 'package.json', 'CLAUDE.md', '.assetsignore', '.github']) {
     assert.ok(ignored(must), `.assetsignore must list ${must}`);
   }
   for (const pub of ['index.html', 'protocol.js', 'app', 'sw.js', 'icons', 'manifest.webmanifest', 'icon.svg']) {
@@ -72,11 +72,7 @@ test('wrangler.jsonc: Worker + assets from the repo root; only /api/* runs the W
   assert.ok(cfg.previews && typeof cfg.previews === 'object', 'Workers Builds runs `wrangler preview` on non-production branches, which needs a previews block');
 });
 
-test('Vercel keeps deploying the static app and ignores the Cloudflare-only files', () => {
-  const v = lines('.vercelignore');
-  for (const f of ['wrangler.jsonc', '.assetsignore', '_headers']) assert.ok(v.includes(f), `.vercelignore must list ${f}`);
-  assert.ok(!existsSync(new URL('../api/', import.meta.url)), 'no api/ directory: Vercel would treat it as functions');
-  assert.ok(!existsSync(new URL('../vercel.json', import.meta.url)));
+test('the app shell is in the repo root (what gets uploaded)', () => {
   assert.ok(readdirSync(new URL('../', import.meta.url)).includes('index.html'));
 });
 

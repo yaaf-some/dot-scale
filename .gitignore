@@ -5,7 +5,6 @@
 .dev.vars.*
 .env
 .env.*
-.vercel
 .wrangler/
 Thumbs.db
 node_modules
