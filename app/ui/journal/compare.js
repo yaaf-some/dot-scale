@@ -11,8 +11,8 @@ import { brewTitle } from './list.js';
 export async function mount(root, ctx, idA, idB) {
   const { store } = ctx;
   const [a, b, beans] = await Promise.all([store.get(idA), store.get(idB), store.list('bean')]);
-  const back = h('a', { class: 'back', href: a ? `#/journal/brew/${encodeURIComponent(idA)}` : '#/journal' }, icon('back', { size: 20 }), a ? 'Back to brew' : 'Journal');
-  if (!a || !b) {
+  const back = h('a', { class: 'back', href: a?.type === 'brew' ? `#/journal/brew/${encodeURIComponent(idA)}` : '#/journal' }, icon('back', { size: 20 }), a?.type === 'brew' ? 'Back to brew' : 'Journal');
+  if (a?.type !== 'brew' || b?.type !== 'brew') {
     append(root, [back, h('div', { class: 'empty' }, h('h2', {}, 'Can’t compare these'), h('p', {}, 'One of the brews is gone. It may have been deleted on another device.'), h('a', { class: 'btn primary', href: '#/journal' }, 'Back to Journal'))]);
     return;
   }
@@ -20,14 +20,18 @@ export async function mount(root, ctx, idA, idB) {
   const names = [a, b].map((x) => `${brewTitle(x, beans)}, ${shortDate(x.startedAt)} ${clock(x.startedAt)}`);
   const curves = [curveOf(a), curveOf(b)];
   let mode = 'weight';
+  let drawing; // each repaint builds a new canvas; release the old one's observers
   const stage = h('div', { class: 'section' });
 
   const paint = () => {
+    drawing?.abort();
+    drawing = new AbortController();
+    ctx.signal.addEventListener('abort', () => drawing.abort(), { once: true });
     const series = curves.map((c, i) => c && { curve: c, channel: mode, color: i ? 'crema' : 'cobalt', dash: !!i, width: 2.5 }).filter(Boolean);
     const missing = curves.map((c, i) => (c ? null : names[i])).filter(Boolean);
     stage.replaceChildren(
       series.length
-        ? h('figure', { class: 'chart' }, curveCanvas(series, { label: `${mode === 'weight' ? 'Weight' : 'Flow'} curves of two brews overlaid.`, signal: ctx.signal }),
+        ? h('figure', { class: 'chart' }, curveCanvas(series, { label: `${mode === 'weight' ? 'Weight' : 'Flow'} curves of two brews overlaid.`, signal: drawing.signal }),
           h('ul', { class: 'legend' }, h('li', {}, h('span', { class: 'swatch' }), `A: ${names[0]}`), h('li', {}, h('span', { class: 'swatch b' }), `B: ${names[1]}`)))
         : null,
       missing.length ? h('p', { class: 'note' }, series.length ? `No curve was recorded for ${missing.join(' and ')}, so only the other one is drawn.` : 'Neither brew has a curve, so here are the numbers side by side.') : null);

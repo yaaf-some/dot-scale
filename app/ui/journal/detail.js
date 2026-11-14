@@ -148,7 +148,7 @@ export async function mount(root, ctx, id) {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary', type: 'button', onclick: async () => { if (await editBrew(ctx, brew, beans)) ctx.navigate(`/journal/brew/${encodeURIComponent(brew.id)}`); } }, 'Edit'),
       h('button', { class: 'btn secondary', type: 'button', onclick: () => chooseOther(ctx, brew, brews, beans) }, 'Compare…'),
-      bean ? h('a', { class: 'btn secondary', href: `#/journal/bean/${encodeURIComponent(bean.id)}?method=${encodeURIComponent(brew.method)}` }, 'Dial-in trail') : null,
+      bean ? h('a', { class: 'btn secondary', href: `#/journal/bean/${encodeURIComponent(bean.id)}?${new URLSearchParams({ method: brew.method, profile: brew.profileId ?? '' })}` }, 'Dial-in trail') : null,
       h('a', { class: 'btn secondary', href: `#/brew/${encodeURIComponent(brew.method)}?brew=${encodeURIComponent(brew.id)}` }, 'Brew again'),
       h('button', { class: 'btn danger', type: 'button', onclick: async () => {
         if (!(await confirmDialog({ title: 'Delete this brew?', message: 'It will be removed from this device and the household.', confirmLabel: 'Delete', danger: true }))) return;

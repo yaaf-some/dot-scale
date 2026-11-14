@@ -51,7 +51,7 @@ export async function mount(root, ctx) {
       select('Method', filters.method, [{ value: 'all', label: 'All methods' }, ...choices.methods.map((id) => ({ value: id, label: methodById(id).name }))], (v) => { filters.method = v; paint(); }),
       select('Beans', filters.beanId, [{ value: 'all', label: 'All beans' }, ...choices.beanIds.map((id) => ({ value: id, label: beanName(id) })), ...(choices.noBean ? [{ value: NO_BEAN, label: 'No beans noted' }] : [])], (v) => { filters.beanId = v; paint(); }));
     const trail = filters.beanId !== 'all' && filters.beanId !== NO_BEAN
-      ? h('a', { class: 'btn secondary small trail-link', href: `#/journal/bean/${encodeURIComponent(filters.beanId)}${filters.method !== 'all' ? `?method=${filters.method}` : ''}` }, icon('chevron', { size: 18 }), `Dial-in trail for ${beanName(filters.beanId)}`)
+      ? h('a', { class: 'btn secondary small trail-link', href: `#/journal/bean/${encodeURIComponent(filters.beanId)}?${new URLSearchParams({ ...(filters.method !== 'all' ? { method: filters.method } : {}), ...(filters.profileId !== 'all' ? { profile: filters.profileId } : {}) })}` }, icon('chevron', { size: 18 }), `Dial-in trail for ${beanName(filters.beanId)}`)
       : null;
     const days = groupByDay(shown);
     body.replaceChildren();
@@ -72,5 +72,12 @@ export async function mount(root, ctx) {
   ]);
   paint();
   // New brews, edits, imports and synced changes repaint the list in place (filters stay).
-  ctx.store.on('change', async (e) => { if (['brew', 'bean', 'profile'].includes(e.type)) { data = await loadAll(ctx.store); if (!ctx.signal.aborted) paint(); } }, { signal: ctx.signal });
+  // An import or sync batch fires one event per record: coalesce them, and ignore a slow load that a newer one has overtaken.
+  let timer, load = 0;
+  ctx.store.on('change', (e) => {
+    if (!['brew', 'bean', 'profile'].includes(e.type)) return;
+    clearTimeout(timer);
+    timer = setTimeout(async () => { const mine = ++load; const fresh = await loadAll(ctx.store); if (mine === load && !ctx.signal.aborted) { data = fresh; paint(); } }, 80);
+  }, { signal: ctx.signal });
+  ctx.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
 }

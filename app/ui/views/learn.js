@@ -10,6 +10,8 @@ import { filterCards, topicsIn, topicLabel, relatedCards, seenSet, markSeen, pro
 import { diagramNode } from '../learn/diagram.js';
 import { ensureStyles, cardHref } from '../journal/shared.js';
 
+ensureStyles(); // starts loading journal.css as soon as the module is imported, so the offline warm-up in pwa.js caches it too
+
 export const meta = { title: 'Learn' };
 
 const methodsOf = (card) => card.methods.length >= METHODS.length ? 'All brewing' : card.methods.map((m) => methodById(m).name).join(', ');
@@ -37,7 +39,7 @@ function readCard(root, ctx, card, seen) {
     next.length ? h('section', { class: 'section' }, h('h2', {}, 'Read next'), h('div', { class: 'cards' }, next.map((c) => cardLink(c, seen)))) : null,
   ]);
   // Opening a card counts as reading it (for this profile, on this device).
-  markSeen(ctx.prefs, ctx.profile?.id, card.id);
+  markSeen(ctx.prefs, ctx.profile?.id, card.id).catch((e) => console.warn('couldn’t save the seen mark', e));
 }
 
 export async function mount(root, ctx) {

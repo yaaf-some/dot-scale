@@ -39,7 +39,12 @@ export function cleanRecord(r) {
   if (typeof r.id !== 'string' || !r.id || r.id.length > MAX_ID || typeof r.type !== 'string') return null;
   if (!BACKUP_TYPES.includes(r.type) || !finite(r.updatedAt) || r.updatedAt <= 0) return null;
   if (r.deleted === true) return { id: r.id, type: r.type, updatedAt: r.updatedAt, deleted: true };
-  return r.type === 'brew' ? cleanBrew(r) : { ...r };
+  if (r.type === 'brew') return cleanBrew(r);
+  // The rest are small records that other screens read fields from without checks, so require the field they can't live without.
+  const text = (v) => typeof v === 'string' && v.trim() !== '';
+  const ok = r.type === 'profile' ? text(r.name) : r.type === 'bean' ? text(r.name) : r.type === 'gear' ? text(r.name) && text(r.kind)
+    : r.type === 'recipe' ? text(r.method) && finite(r.dose) && finite(r.yield) : true;
+  return ok ? { ...r } : null;
 }
 
 /**

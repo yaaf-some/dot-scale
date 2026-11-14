@@ -5,8 +5,8 @@
 .back { justify-self: start; display: inline-flex; align-items: center; gap: var(--s1); min-height: var(--target); color: var(--ink-soft); font-weight: 600; text-decoration: none; margin-left: calc(var(--s2) * -1); padding: 0 var(--s2); }
 .back .icon { display: inline-flex; }
 .sub { color: var(--ink-soft); font-size: var(--step--1); }
-.tag { display: inline-block; font-size: 0.75rem; font-weight: 650; padding: 2px 8px; border-radius: var(--r-chip); background: var(--sunken); color: var(--ink-soft); }
-.badge { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--step--1); font-weight: 650; padding: 4px 12px 4px 8px; border-radius: var(--r-chip); background: var(--crema); color: var(--on-crema); }
+.tag { display: inline-block; font-size: 0.75rem; font-weight: 650; padding: var(--s1) var(--s2); border-radius: var(--r-chip); background: var(--sunken); color: var(--ink-soft); }
+.badge { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--step--1); font-weight: 650; padding: var(--s1) var(--s3) var(--s1) var(--s2); border-radius: var(--r-chip); background: var(--crema); color: var(--on-crema); }
 .stars { font-family: var(--font-display); letter-spacing: 0.08em; color: var(--crema-ink); white-space: nowrap; }
 .stars .off { color: var(--line); }
 .file-btn { position: relative; cursor: pointer; }
@@ -24,8 +24,8 @@
 .jrow + .jrow { border-top: 1px solid var(--line); }
 .jrow:active { background: var(--sunken); }
 .jrow:focus-visible { outline: 3px solid var(--cobalt); outline-offset: -3px; }
-.jrow-icon { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--sunken); color: var(--ink-soft); }
-.jrow-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.jrow-icon { flex: none; width: 40px; height: 40px; border-radius: var(--r-chip); display: grid; place-items: center; background: var(--sunken); color: var(--ink-soft); }
+.jrow-main { flex: 1; min-width: 0; display: grid; gap: var(--s1); }
 .jrow-title { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jrow-sub { color: var(--ink-soft); font-size: var(--step--1); font-variant-numeric: tabular-nums; }
 .jrow-end { flex: none; display: grid; justify-items: end; gap: 2px; }
@@ -74,7 +74,7 @@
 /* ---------- Dial-in trail ---------- */
 .trail { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: shot; }
 .trail li { position: relative; padding: var(--s3) 0 var(--s4) calc(var(--s6) + var(--s3)); border-left: 0; display: grid; gap: var(--s2); justify-items: start; }
-.trail li::before { content: counter(shot); counter-increment: shot; position: absolute; left: 0; top: var(--s3); width: var(--s6); height: var(--s6); border-radius: 50%; display: grid; place-items: center; background: var(--sunken); color: var(--ink-soft); font-weight: 650; font-variant-numeric: tabular-nums; }
+.trail li::before { content: counter(shot); counter-increment: shot; position: absolute; left: 0; top: var(--s3); width: var(--s6); height: var(--s6); border-radius: var(--r-chip); display: grid; place-items: center; background: var(--sunken); color: var(--ink-soft); font-weight: 650; font-variant-numeric: tabular-nums; }
 .trail li::after { content: ""; position: absolute; left: calc(var(--s6) / 2 - 1px); top: calc(var(--s3) + var(--s6) + 4px); bottom: 4px; width: 2px; background: var(--line); }
 .trail li:last-child::after { display: none; }
 .trail li.dialled::before { background: var(--crema); color: var(--on-crema); }
@@ -96,7 +96,7 @@
 .card-link:active { background: var(--sunken); }
 .card-link:focus-visible { outline: 3px solid var(--cobalt); outline-offset: 2px; }
 .card-link .row-main { flex: 1; }
-.dot-new { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--crema); }
+.dot-new { flex: none; width: 10px; height: 10px; border-radius: var(--r-chip); background: var(--crema); }
 .dot-new.read { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
 .article { display: grid; gap: var(--s4); max-width: 62ch; }
 .article h1 { font-size: var(--step-3); }

@@ -100,3 +100,14 @@ test('exportCSV: header, rows oldest first, names resolved, formulas in notes an
   assert.ok(lines[1].startsWith('2023-11-14T22:13:20.000Z,"\'=HYPERLINK(""x"")",espresso,'));
   assert.ok(lines[2].includes('"Acme, Inc"') && lines[2].includes('Ethiopia Guji') && lines[2].includes(',11 fine,') && lines[2].includes(",4,-1,0,'=1+1"), lines[2]);
 });
+
+test('cleanRecord requires the fields other screens read without checks', () => {
+  assert.equal(cleanRecord({ id: 'p', type: 'profile', updatedAt: 5 }), null);
+  assert.equal(cleanRecord({ id: 'p', type: 'profile', name: '  ', updatedAt: 5 }), null);
+  assert.equal(cleanRecord({ id: 'p', type: 'profile', name: 'Yaaf', updatedAt: 5 }).name, 'Yaaf');
+  assert.equal(cleanRecord({ id: 'b', type: 'bean', updatedAt: 5 }), null);
+  assert.equal(cleanRecord({ id: 'g', type: 'gear', name: 'Grinder', updatedAt: 5 }), null);
+  assert.ok(cleanRecord({ id: 'g', type: 'gear', kind: 'grinder', name: 'Grinder', updatedAt: 5 }));
+  assert.equal(cleanRecord({ id: 'r', type: 'recipe', method: 'espresso', updatedAt: 5 }), null);
+  assert.ok(cleanRecord({ id: 'r', type: 'recipe', method: 'espresso', dose: 16, yield: 32, updatedAt: 5 }));
+});

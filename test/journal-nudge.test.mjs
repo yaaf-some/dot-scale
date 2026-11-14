@@ -78,3 +78,9 @@ test('non-espresso runs use brew/steep wording', () => {
   const n = journalNudge({ brews: [mk(1), mk(2)], beans: [bean()], now: NOW });
   if (n) assert.match(n.text, /brews on Ethiopia Guji steeped (short|long); steep a little (longer|shorter)/);
 });
+
+test('drift after being dialled in earlier still gets advice', () => {
+  const brews = [shot(goodShot, 1, good), shot(goodShot, 2, good), shot(fastShot, 3), shot(fastShot, 4), shot(fastShot, 5)];
+  const n = journalNudge({ brews, beans: [bean()], now: NOW });
+  assert.match(n.id, /^run-fast-/);
+});

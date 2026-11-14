@@ -50,7 +50,7 @@ export function nudgeCandidates({ brews, beans = [], now = Date.now() }) {
   const run = [];
   for (let i = shots.length - 1; i >= 0 && shots[i].status && shots[i].status === shots[shots.length - 1].status; i--) run.unshift(shots[i]);
   const kind = RUN[shots[shots.length - 1]?.status];
-  if (kind && run.length >= 2 && !trail.dialledIn) {
+  if (kind && run.length >= 2) {
     const n = Math.min(run.length, 3);
     const v = last.grind?.value;
     out.push({ id: `run-${shots[shots.length - 1].status}-${bean.id}-${last.id}`, tone: 'info',

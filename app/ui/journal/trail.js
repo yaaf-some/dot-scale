@@ -53,8 +53,10 @@ function shotItem(s, prev) {
 }
 
 export async function mount(root, ctx, beanId) {
-  const { store, profile } = ctx;
+  const { store } = ctx;
   const [bean, brews] = await Promise.all([store.get(beanId), store.list('brew')]);
+  // Whose shots: the owner named in the link (so a brew opened from "Everyone" shows its own trail), else the active profile.
+  const profile = (ctx.query.profile && ctx.profiles.find((p) => p.id === ctx.query.profile)) || ctx.profile;
   const back = h('a', { class: 'back', href: '#/journal' }, icon('back', { size: 20 }), 'Journal');
   const mine = brews.filter((b) => b.beanId === beanId && (!profile || b.profileId === profile.id));
   if (!bean || !mine.length) {

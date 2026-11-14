@@ -8,6 +8,8 @@ import * as detail from '../journal/detail.js';
 import * as compare from '../journal/compare.js';
 import * as trail from '../journal/trail.js';
 
+ensureStyles(); // starts loading journal.css as soon as the module is imported, so the offline warm-up in pwa.js caches it too
+
 export const meta = { title: 'Journal' };
 
 export async function mount(root, ctx) {
