@@ -151,7 +151,8 @@ Sync is optional and separate from hosting: until you do this, the app shows "Sy
    ```
    (If wrangler says the Worker doesn't exist yet, deploy once first.) No terminal? Dashboard → **Workers & Pages → dot-scale →
    Settings → Variables and Secrets → Add**, type **Secret**, name `SYNC_PEPPER`. Secrets persist across deploys. Keep a copy in
-   your password manager: **if you ever change or lose it, existing households can no longer be found** and must be recreated.
+   your password manager: **if you ever change or lose it, existing households can no longer be found** and must be recreated
+   (so set it before anyone creates a household; nothing was deployed with the old, optional pepper).
    For local development put it in a git-ignored `.dev.vars` file (`SYNC_PEPPER=...`), never in a tracked file.
 4. Check: `curl -s -X POST https://coffee.yaafsome.fyi/api/sync` returns `{"error":"missing_code",...}` when the API is fully set
    up. `sync_not_configured` means D1 isn't bound (recheck the id) or the pepper is missing/too short (its message says which).

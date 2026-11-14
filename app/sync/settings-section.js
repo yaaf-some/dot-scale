@@ -3,7 +3,6 @@ import { h } from '../ui/dom.js';
 import { section, group } from '../ui/components.js';
 import { confirmDialog } from '../ui/dialog.js';
 import { registerSettingsSection } from '../ui/settings-sections.js';
-import { formatStatus } from './client.js';
 import { getSync } from './boot.js';
 
 const btn = (label, onclick, cls = '') => h('button', { class: `btn small ${cls}`.trim(), type: 'button', onclick }, label);
@@ -24,6 +23,7 @@ registerSettingsSection({
         h('span', { class: 'row-title' }, s.label),
         s.error && h('span', { class: 'row-sub' }, s.error.message),
         s.skipped ? h('span', { class: 'row-sub' }, `${s.skipped} item${s.skipped === 1 ? '' : 's'} too large or invalid to sync.`) : null)];
+      if (!has && s.state === 'unavailable') rows.push(rowOf(h('div', { class: 'row-main' }, h('span', { class: 'row-sub' }, 'The app works fine without it.')), btn('Check again', () => run(() => sync.probe({ force: true })))));
       if (!has && s.state !== 'unavailable') {
         const input = h('input', { type: 'text', placeholder: 'maple-tiger-orbit-river-4271', 'aria-label': 'Household code', autocomplete: 'off', autocapitalize: 'none', spellcheck: false });
         rows.push(

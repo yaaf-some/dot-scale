@@ -602,3 +602,35 @@ test('two real app stores converge through the store adapter, the client and the
   await B.client.syncNow();
   assert.deepEqual(JSON.parse(w.net.requests.at(-1).body).changes, []);
 });
+
+test('joining or leaving a household tells the store to forget what came from the old one', async () => {
+  const w = world();
+  const seed = w.device(); await seed.client.createHousehold();
+  const code = seed.client.getHouseholdCode();
+  let resets = 0;
+  const store = makeStore(); store.reset = () => { resets++; };
+  const d = w.device({ store });
+  await d.client.joinHousehold(code);
+  assert.equal(resets, 1);
+  d.client.leaveHousehold();
+  assert.equal(resets, 2);
+  await d.client.createHousehold();
+  assert.equal(resets, 3);
+});
+
+test('probe() is remembered for 30 s, can be forced, and a network blip is not remembered', async () => {
+  const w = world();
+  const d = w.device();
+  assert.equal(await d.client.probe(), true);
+  assert.equal(await d.client.probe(), true);
+  assert.equal(w.net.requests.length, 1, 'the second call is served from memory');
+  w.clock.t += 31_000;
+  await d.client.probe();
+  assert.equal(w.net.requests.length, 2, 'asked again after 30 s');
+  await d.client.probe({ force: true });
+  assert.equal(w.net.requests.length, 3, 'force asks again');
+  w.net.down = true;
+  assert.equal(await d.client.probe({ force: true }), false);
+  w.net.down = false;
+  assert.equal(await d.client.probe(), true, 'a failed network attempt is not cached as an answer');
+});

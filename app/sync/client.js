@@ -8,6 +8,7 @@
 //   store.applyRemote(records) -> Promise<void>
 //       merge server records using last-writer-wins on updatedAt (ties: id); idempotent.
 //   store.onChange(cb) -> unsubscribe   (optional; fire on local writes. Otherwise call client.notifyChange())
+//   store.reset()                        (optional; called when the household changes, to forget what came from the old one)
 
 import { normalizeCode, isValidCodeFormat } from './code.js';
 
@@ -62,6 +63,7 @@ export function formatStatus(s, now = Date.now()) {
 }
 
 const STORAGE_KEY = 'dot.sync';
+const PROBE_CACHE_MS = 30_000;
 const blankState = () => ({ code: null, since: 0, pushCursor: 0, lastSyncedAt: null, rejected: {} });
 
 function defaultStorage() {
@@ -302,6 +304,7 @@ export function createSyncClient({
   // ---- public flows ----------------------------------------------------------------------------------------
   function adopt(code) {
     gen++;
+    store.reset?.();
     clearTimer();
     persisted = { ...blankState(), code };
     save();
@@ -339,6 +342,7 @@ export function createSyncClient({
   /** Stop syncing this household on this device. Local data stays. */
   function leaveHousehold() {
     gen++;
+    store.reset?.();
     clearTimer();
     persisted = blankState();
     try { storage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
@@ -348,20 +352,25 @@ export function createSyncClient({
 
   /**
    * Is a sync service there and configured? Sends no code, so the server answers before touching the database.
-   * Sets the "Sync not set up" status when it isn't; never throws. Resolves to true if sync can be used.
+   * Sets the "Sync not set up" status when it isn't; never throws. Resolves to true if sync can be used. The answer is
+   * remembered for 30 s unless `{ force: true }`.
    */
-  async function probe() {
+  let probeAt = 0, probeResult = false;
+  async function probe({ force = false } = {}) {
+    if (!force && probeAt && now() - probeAt < PROBE_CACHE_MS) return probeResult; // opening Settings repeatedly is not a request each time
+    probeAt = now();
     try {
       await request('/sync', {});
-      return true;
+      return (probeResult = true);
     } catch (e) {
       if (e.code === 'no_endpoint' || e.code === 'not_configured') {
         if (!persisted.code) setStatus({ state: 'unavailable', error: { code: e.code, message: e.message, fatal: false } });
-        return false;
+        return (probeResult = false);
       }
       const available = e.code === 'unauthorized'; // 401 "missing code" proves the service is there
       if (available && !persisted.code && status.state === 'unavailable') setStatus({ state: 'off', error: null });
-      return available;
+      if (!available) probeAt = 0; // a network blip is not an answer: try again next time
+      return (probeResult = available);
     }
   }
 

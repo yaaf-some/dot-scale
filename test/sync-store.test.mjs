@@ -37,10 +37,10 @@ test('records merged in from the server are not pushed straight back, but a newe
   assert.equal((await store.get(remote.id)).name, 'Remote');
   let r = await adapter.changesSince(0);
   assert.deepEqual(r.records, [], 'no echo of what the server just sent');
-  assert.equal(r.cursor, remote.updatedAt, 'but the cursor still moves past it');
+  assert.equal(r.cursor, 0, 'the cursor does not move for records that came from the server');
   clock.t += 100;
   await store.update(remote.id, { name: 'Edited here' });
-  r = await adapter.changesSince(remote.updatedAt);
+  r = await adapter.changesSince(0);
   assert.deepEqual(r.records.map((x) => x.name), ['Edited here']);
 });
 
@@ -63,4 +63,25 @@ test('onChange fires for local writes only, not for merged-in records; returns a
   off();
   await store.put({ type: 'bean', name: 'After unsubscribe' });
   assert.equal(n, 1);
+});
+
+test('a record from a peer with a fast clock does not hide later local edits', async () => {
+  const { clock, store, adapter } = make();
+  await adapter.applyRemote([{ id: 'from-the-future', type: 'bean', name: 'Fast clock', updatedAt: clock.t + 3_600_000 }]); // stamped an hour ahead
+  const first = await adapter.changesSince(0);
+  assert.deepEqual(first.records, []);
+  clock.t += 50;
+  const mine = await store.put({ type: 'bean', name: 'Made here, now' }); // stamped now: far below the peer's record
+  const r = await adapter.changesSince(first.cursor);
+  assert.deepEqual(r.records.map((x) => x.id), [mine.id], 'the local edit is still found');
+  assert.equal(r.cursor, mine.updatedAt);
+});
+
+test('reset() forgets what came from the server, so a new household gets everything', async () => {
+  const { store, adapter } = make();
+  await adapter.applyRemote([{ id: 'r1', type: 'bean', name: 'From household A', updatedAt: 5 }]);
+  assert.deepEqual((await adapter.changesSince(0)).records, []);
+  adapter.reset();
+  assert.deepEqual((await adapter.changesSince(0)).records.map((x) => x.id), ['r1'], 'now pushed to the next household');
+  assert.equal((await store.get('r1')).name, 'From household A');
 });
