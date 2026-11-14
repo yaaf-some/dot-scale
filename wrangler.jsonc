@@ -1,0 +1,17 @@
+// Cloudflare Worker with static assets: serves the app (the repo root, no build step) at the edge.
+// There is no Worker code yet; this is an assets-only Worker. Private files are excluded by .assetsignore,
+// security headers come from _headers. See docs/DEPLOY.md for the owner steps.
+{
+  "name": "dot-scale",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./"
+  },
+
+  // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
+  "workers_dev": true
+
+  // Custom domain: add coffee.yaafsome.fyi in the dashboard AFTER removing the old Vercel CNAME (docs/DEPLOY.md, step 4).
+  // To pin it in this file instead, add (only once that DNS record is gone, or the deploy fails):
+  //   "routes": [{ "pattern": "coffee.yaafsome.fyi", "custom_domain": true }]
+}
