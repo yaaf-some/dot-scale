@@ -14,6 +14,7 @@ import { icon } from './ui/icons.js';
 import { h, setChildren } from './ui/dom.js';
 import { toast } from './ui/toast.js';
 import { registerServiceWorker } from './pwa.js';
+import { startSync } from './sync/boot.js';
 import './modules.js';
 
 const TABS = [
@@ -110,6 +111,7 @@ function rerenderSoon() {
 async function boot() {
   store = await openStore();
   await runFirstRun(store);
+  startSync(store); // resumes a saved household in the background; no network request without one
   applyTheme(store.prefs.get('theme', 'system'));
   scale = createScale({ prefs: store.prefs });
 

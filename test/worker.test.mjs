@@ -2,8 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { makeServer, call, T0 } from './helpers/world.mjs';
-import { generateCode, hashCode, handleHousehold, handleSync, LIMITS } from '../worker/handlers.js';
+import { makeServer, call, T0, TEST_PEPPER } from './helpers/world.mjs';
+import { generateCode, hashCode, handleHousehold, handleSync, LIMITS, CODE_ENTROPY_BITS, MIN_PEPPER_LENGTH } from '../worker/handlers.js';
+import { isValidCodeFormat } from '../app/sync/code.js';
 import { compare } from '../worker/records.js';
 import { WORDS } from '../worker/words.js';
 import worker from '../worker/index.js';
@@ -12,16 +13,56 @@ const rec = (id, updatedAt, extra = {}) => ({ id, type: 'brew', updatedAt, ...ex
 const post = (s, code, body, opts = {}) => call(s.sync, { headers: { authorization: `Bearer ${code}` }, body, ...opts });
 async function newHousehold(s, ip) { const r = await call(s.household, { ip, path: '/api/household' }); assert.equal(r.status, 201); return r.json.code; }
 
-test('words list has 256 distinct lowercase words; codes look right and are not repeated', () => {
+test('words list has 256 distinct lowercase words; codes are 4 words + 4 digits, unique, and >= 45 bits', () => {
   assert.equal(WORDS.length, 256);
   assert.equal(new Set(WORDS).size, 256);
+  assert.ok(CODE_ENTROPY_BITS >= 45 && CODE_ENTROPY_BITS < 46, `entropy ${CODE_ENTROPY_BITS}`);
+  assert.equal(Math.round(CODE_ENTROPY_BITS * 10) / 10, 45.3);
   const seen = new Set();
   for (let i = 0; i < 2000; i++) {
     const c = generateCode();
-    assert.match(c, /^[a-z]+-[a-z]+-[a-z]+-\d{4}$/);
+    assert.match(c, /^[a-z]+-[a-z]+-[a-z]+-[a-z]+-\d{4}$/);
+    assert.ok(isValidCodeFormat(c) && c.length <= 64, c);
     seen.add(c);
   }
-  assert.ok(seen.size > 1990, 'codes should essentially never collide');
+  assert.equal(seen.size, 2000, 'no collisions in 2000 codes');
+  // Digits and words are uniform: every word and every digit position gets used.
+  const words = new Set(); const digits = new Set();
+  for (let i = 0; i < 4000; i++) { const p = generateCode().split('-'); p.slice(0, 4).forEach((w) => words.add(w)); digits.add(p[4][0]); }
+  assert.ok(words.size > 250 && digits.size === 10);
+});
+
+test('older 3-word codes still work: the format check accepts them and an old household still authenticates', async () => {
+  for (const old of ['maple-tiger-orbit-4271', 'maple-tiger-orbit-river-4271']) assert.ok(isValidCodeFormat(old), old);
+  for (const bad of ['maple-4271', 'MAPLE tiger', 'a'.repeat(70), 'maple-tiger-orbit-river-lake-moss-sand-1234']) assert.ok(!isValidCodeFormat(bad), bad);
+  const s = makeServer();
+  const oldCode = 'maple-tiger-orbit-4271';
+  assert.equal(await s.storage.createHousehold(await hashCode(oldCode, TEST_PEPPER), s.clock.t), true);
+  const r = await post(s, oldCode, { since: 0, changes: [rec('brew-0001', 5)] });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.accepted, 1);
+});
+
+test('pepper is mandatory: no secret (or a short one) gives the 503 "not set up" on every endpoint and nothing is touched', async () => {
+  for (const pepper of ['', null, 'too-short', 'x'.repeat(MIN_PEPPER_LENGTH - 1)]) {
+    const s = makeServer({ pepper });
+    s.d1.queries = 0;
+    const calls = [
+      call(s.household, { path: '/api/household' }),
+      post(s, 'maple-tiger-orbit-river-4271', { since: 0, changes: [] }),
+      call(s.sync, { body: { since: 0 } }), // the client's no-code probe must also report "not set up"
+    ];
+    for (const r of await Promise.all(calls)) {
+      assert.equal(r.status, 503, String(pepper));
+      assert.equal(r.json.error, 'sync_not_configured');
+      assert.match(r.json.message, /SYNC_PEPPER/);
+      assert.match(r.json.message, /wrangler secret put SYNC_PEPPER/);
+      assert.match(r.json.message, /never in the repo/);
+    }
+    assert.equal(s.d1.queries, 0, 'the database is not touched without a pepper');
+  }
+  const ok = makeServer({ pepper: 'x'.repeat(MIN_PEPPER_LENGTH) });
+  assert.equal((await call(ok.household, { path: '/api/household' })).status, 201, 'exactly the minimum length is accepted');
 });
 
 test('worker entry: routes /api/*, 404s unknown API paths, falls through to assets, 503 JSON without a D1 binding', async () => {
@@ -45,13 +86,15 @@ test('worker entry: routes /api/*, 404s unknown API paths, falls through to asse
 
 test('worker entry end to end with a D1 binding', async () => {
   const s = makeServer();
-  const env = { DB: s.d1, SYNC_PEPPER: 'pep' };
+  const env = { DB: s.d1, SYNC_PEPPER: TEST_PEPPER };
   const c = await worker.fetch(new Request('https://x.test/api/household', { method: 'POST' }), env);
   assert.equal(c.status, 201);
   const { code } = await c.json();
   const r = await worker.fetch(new Request('https://x.test/api/sync', { method: 'POST', headers: { authorization: `Bearer ${code}` }, body: JSON.stringify({ since: 0, changes: [rec('brew-0001', 5)] }) }), env);
   assert.equal((await r.json()).accepted, 1);
-  assert.equal(s.d1.sql('SELECT hash FROM households')[0].hash, await hashCode(code, 'pep'), 'pepper from the env is used');
+  assert.equal(s.d1.sql('SELECT hash FROM households')[0].hash, await hashCode(code, TEST_PEPPER), 'pepper from the env is used');
+  const noPepper = await worker.fetch(new Request('https://x.test/api/household', { method: 'POST' }), { DB: s.d1 });
+  assert.equal(noPepper.status, 503, 'the Worker without SYNC_PEPPER refuses to create households');
 });
 
 test('migration + schema: applies cleanly and has the expected tables and index', () => {
@@ -62,15 +105,15 @@ test('migration + schema: applies cleanly and has the expected tables and index'
 });
 
 test('household: POST only; creation stores only a hash of the code', async () => {
-  const s = makeServer({ pepper: 'pep' });
+  const s = makeServer();
   const get = await call(s.household, { method: 'GET', path: '/api/household' });
   assert.equal(get.status, 405);
   assert.equal(get.headers.allow, 'POST');
   const code = await newHousehold(s);
   const dump = JSON.stringify(['households', 'records', 'rate_limits'].map((t) => s.d1.sql(`SELECT * FROM ${t}`)));
   assert.ok(!dump.includes(code), 'code must not appear anywhere in the database');
-  assert.equal(s.d1.sql('SELECT hash FROM households')[0].hash, await hashCode(code, 'pep'));
-  assert.notEqual(await hashCode(code, 'pep'), await hashCode(code, ''));
+  assert.equal(s.d1.sql('SELECT hash FROM households')[0].hash, await hashCode(code, TEST_PEPPER));
+  assert.notEqual(await hashCode(code, TEST_PEPPER), await hashCode(code, ''), 'the pepper changes the hash');
   const probe = await post(s, code, { since: 0, changes: [] });
   assert.equal(probe.status, 200);
   assert.deepEqual(probe.json, { rev: 0, changes: [], more: false, accepted: 0, rejected: [], reset: false });

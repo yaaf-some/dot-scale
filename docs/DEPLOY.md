@@ -140,11 +140,22 @@ Sync is optional and separate from hosting: until you do this, the app shows "Sy
 2. Create the tables: `npx wrangler d1 migrations apply dot-scale --remote`. No terminal? Dashboard →
    **Storage & databases → D1 → dot-scale → Console**, paste `migrations/0001_init.sql`, run. Repeat for any later
    `migrations/000N_*.sql` (deploys do not run migrations).
-3. Optional, recommended **before anyone creates a household**: `npx wrangler secret put SYNC_PEPPER` and paste a long random
-   string. The server then hashes household codes with it, so a leaked database alone can't be used to guess codes. Changing
-   it later orphans existing households.
-4. Check: `curl -s -X POST https://coffee.yaafsome.fyi/api/sync` returns `{"error":"missing_code",...}` when the API is up
-   (`sync_not_configured` means D1 isn't bound: recheck the id). Then in the app: **Settings → Sync → Create household**, and
+3. **Required: set the `SYNC_PEPPER` secret, once, before anyone creates a household.** It is the key the server uses to hash
+   household codes. The code and the Worker are public, so without a secret key a leaked database could be brute-forced
+   offline; the Worker therefore **refuses to run** (503 `sync_not_configured`, and the app shows "Sync not set up") until the
+   secret exists and is at least 32 characters. Make a long random value and store it as a Worker secret, **never in the repo,
+   a PR, a screenshot or a chat**:
+   ```
+   openssl rand -base64 48        # prints a suitable value; copy it
+   npx wrangler secret put SYNC_PEPPER    # paste it when asked
+   ```
+   (If wrangler says the Worker doesn't exist yet, deploy once first.) No terminal? Dashboard → **Workers & Pages → dot-scale →
+   Settings → Variables and Secrets → Add**, type **Secret**, name `SYNC_PEPPER`. Secrets persist across deploys. Keep a copy in
+   your password manager: **if you ever change or lose it, existing households can no longer be found** and must be recreated.
+   For local development put it in a git-ignored `.dev.vars` file (`SYNC_PEPPER=...`), never in a tracked file.
+4. Check: `curl -s -X POST https://coffee.yaafsome.fyi/api/sync` returns `{"error":"missing_code",...}` when the API is fully set
+   up. `sync_not_configured` means D1 isn't bound (recheck the id) or the pepper is missing/too short (its message says which).
+   Then in the app: **Settings → Sync → Create household**, and
    **Join** from the other device.
 
 Previews: a Workers Builds preview of another branch uses the **same D1 database** as production (the binding is in

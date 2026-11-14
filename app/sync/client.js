@@ -122,7 +122,7 @@ export function createSyncClient({
 
   // ---- scheduling ------------------------------------------------------------------------------------------
   let timer = null, timerDue = 0, blockedUntil = 0, attempts = 0, fatal = false;
-  let running = null, probing = null, dirty = false, started = false, applying = false, gen = 0;
+  let running = null, dirty = false, started = false, applying = false, gen = 0;
   const cleanups = [];
 
   // `kind` of the pending timer: 'debounce' (a burst of local edits, may be pushed back) or 'run' (retry/immediate).
@@ -328,7 +328,7 @@ export function createSyncClient({
   async function joinHousehold(input) {
     const code = normalizeCode(input);
     if (!isValidCodeFormat(code)) {
-      throw new SyncError('invalid_code', 'Household codes look like maple-tiger-orbit-4271: three words and four digits. Check what you typed.');
+      throw new SyncError('invalid_code', 'Household codes look like maple-tiger-orbit-river-4271: four words and four digits (older codes have three words). Check what you typed.');
     }
     await request('/sync', { since: 0, changes: [], limit: 0 }, code); // throws SyncError if unknown/offline/not set up
     adopt(code);
@@ -379,7 +379,7 @@ export function createSyncClient({
       if (typeof off === 'function') cleanups.push(off);
     }
     if (persisted.code) schedule(0, { force: true });
-    else { setStatus({ state: 'off' }); probing = probe().finally(() => { probing = null; }); }
+    else setStatus({ state: 'off' }); // no request until the user opens Settings → Sync (which calls probe())
     return api;
   }
 
@@ -394,8 +394,8 @@ export function createSyncClient({
     getStatus, onStatus,
     getHouseholdCode: () => persisted.code,
     hasHousehold: () => !!persisted.code,
-    /** Resolves when no sync or start-up probe is in flight (handy for tests and "sync, then close" flows). */
-    whenIdle: () => Promise.all([running, probing]).then(() => undefined),
+    /** Resolves when no sync is in flight (handy for tests and "sync, then close" flows). */
+    whenIdle: () => (running ?? Promise.resolve()).then(() => undefined),
   };
   return api;
 }

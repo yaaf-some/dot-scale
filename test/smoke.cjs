@@ -11,7 +11,8 @@ const pw = require('playwright');
   const errors = [];
   const track = (page) => {
     page.on('pageerror', (e) => errors.push(e.message));
-    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+    // The static test server has no /api, so the sync probe 404s; Chromium logs any failed request as a console error.
+    page.on('console', (m) => m.type() === 'error' && !(/Failed to load resource/.test(m.text()) && /\/api\//.test(m.location().url || '')) && errors.push(m.text()));
   };
   let failed = false;
   const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (!ok) failed = true; };
@@ -68,6 +69,8 @@ const pw = require('playwright');
     await page.click('dialog[open] button:has-text("Add beans")');
     await page.waitForSelector('#beans .row:has-text("Ethiopia Guji")');
     check(true, 'beans can be added in Settings');
+    await page.waitForSelector('#sync .row-title:has-text("Sync not set up")', { timeout: 5000 });
+    check(true, 'Settings has a Sync section that says "Sync not set up" when there is no server (the app keeps working)');
 
     await page.reload();
     await page.waitForSelector('#profiles');

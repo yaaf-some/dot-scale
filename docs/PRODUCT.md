@@ -137,8 +137,9 @@ instead of Vercel, because the owner prefers Cloudflare's security. The owner ch
 The live site stays on Vercel until the owner cuts over; nothing here may break Vercel's static deploy of `main` before then.
 
 - **Local-first:** the app works fully offline; sync runs in the background when online.
-- **Household code:** the first device creates a household and shows a code (e.g. `maple-tiger-orbit-42`). Other devices join by
-  entering it. No accounts or passwords. The server stores only a hash of the code. Profiles live inside the household.
+- **Household code:** the first device creates a household and shows a code (e.g. `maple-tiger-orbit-river-4271`: 4 words + 4 digits,
+  45 bits). Other devices join by entering it. No accounts or passwords. The server stores only an HMAC of the code, keyed with the
+  required `SYNC_PEPPER` secret (the API answers 503 "not set up" until it is set). Profiles live inside the household.
 - **Backend:** a Cloudflare Worker (`worker/index.js`, no npm dependencies) serving the static app through Workers static assets and
   handling `/api/*`. Storage is **D1 (SQLite)**, not KV: sync needs a strictly increasing per-household `rev`, which KV's eventual
   consistency can't give. All storage sits behind one small adapter with an in-memory fake for tests. No `api/` directory (Vercel would
