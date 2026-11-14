@@ -1,9 +1,12 @@
-# Security headers for the static app (Workers static assets). API responses set their own headers in worker/handlers.js.
+# Security headers for the static app (Workers static assets). API responses set their own headers in the Worker.
 #
-# CSP assumptions: the current shell (index.html) is one inline <script type="module">, an inline <style> block and
+# CSP assumptions: the CURRENT shell (index.html) is one inline <script type="module">, an inline <style> block and
 # style="" attributes, and loads nothing from other origins. Hence 'unsafe-inline' for script and style for now.
-# TODO(security): once the new app shell has no inline script/styles, drop 'unsafe-inline' from both directives
-# (move CSS to a file; use a hashed or external module script).
+# TODO(security): once the new app shell (PR "App shell, design system") has landed on this branch:
+#   - script-src: remove 'unsafe-inline' -> "script-src 'self'" (that shell loads app/main.js as an external module).
+#   - style-src: remove 'unsafe-inline' too, after the one style="" attribute in its <noscript> is turned into a class.
+#     (JS setting element.style.x = ... is allowed by CSP; only style="" in markup/innerHTML needs 'unsafe-inline'.)
+# test/hosting.test.mjs fails if the CSP would break the app, and shows a TODO when it can be tightened.
 /*
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff

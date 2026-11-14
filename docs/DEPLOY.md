@@ -11,11 +11,12 @@ Facts this is written for: the `yaafsome.fyi` zone is active on the Cloudflare F
 and the only DNS record is a CNAME `coffee` pointing at a `vercel-dns.com` name (DNS only). That record is why the order
 of steps 4-5 matters.
 
-## 1. Merge this PR
+## 1. How this reaches production
 
-It adds `wrangler.jsonc` (the Worker + assets config), `.assetsignore` (what is never served: `.git`, `.claude`, `docs`,
-`test`, `scripts`, `package.json`, ...), `_headers` (security headers) and this guide. Vercel keeps deploying `main`
-exactly as before (`.vercelignore` excludes the new files), so merging changes nothing for visitors yet.
+This work lands on the **integration branch** (`claude/admiring-brahmagupta-2rovr3`), not on `main`. `main` is production and
+only changes at the single release PR, so `wrangler.jsonc` is not on `main` until then and Vercel keeps serving the live site
+exactly as before in the meantime (`.vercelignore` excludes the Cloudflare-only files). To try the new app on Cloudflare
+before the release, use the staging steps (section "Try the integration branch on your phone", below).
 
 ## 2. Connect the GitHub repo (Workers Builds)
 
@@ -26,8 +27,8 @@ exactly as before (`.vercelignore` excludes the new files), so merging changes n
    (the default).
 4. Save and deploy. Pushes to `main` now deploy automatically.
 
-Pull requests: Workers Builds can also build other branches as preview versions (off by default for some setups; see the
-Worker's **Settings → Builds**). Previews are optional.
+Production branch: `main` (so real Cloudflare deploys start when the release PR lands). Other branches are built as
+**preview versions**, see the next section.
 
 ## 3. Test on the workers.dev address first
 
@@ -39,6 +40,30 @@ is at risk. Check the security headers and that private files are not served:
 curl -sI https://dot-scale.<your-subdomain>.workers.dev/ | grep -i -E "strict|content-security|permissions|nosniff"
 curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/wrangler.jsonc   # must be 404
 ```
+
+## Try the integration branch on your phone (staging, before the cutover)
+
+Workers Builds builds non-production branches as **preview versions** with their own URL, without touching production or your
+domain. This is how you try the new app on Cloudflare while Vercel still serves the old one.
+
+1. Dashboard → **Workers & Pages → dot-scale → Settings → Builds → Branch control**: make sure builds for non-production
+   branches are **on** (non-production deploy command: `npx wrangler versions upload`, the default). In a public repo, you can
+   limit them to the branches you trust (for example `claude/*`).
+2. **Settings → Domains & Routes**: make sure **Preview URLs** are enabled.
+3. Push to (or re-run a build of) the integration branch `claude/admiring-brahmagupta-2rovr3`. When the build finishes, the
+   preview URL is on the build's page and under the Worker's **Deployments / Versions**. A branch gets a stable alias of the
+   form `https://<branch-name-with-dashes>-dot-scale.<your-workers-subdomain>.workers.dev` (lower-case, non-alphanumerics become
+   `-`, the name part is cut to fit 63 characters). Cloudflare's GitHub app may also post it on the pull request.
+4. Open that URL on the iPhone/iPad in Bluefy (or Chrome), press **Demo** or connect the scale, and try it. It is a different
+   address from `coffee.yaafsome.fyi`, so it has its **own browser data** (fresh settings and history) and its own Bluetooth
+   permission; the Vercel site's data is untouched.
+
+Preview versions use the same bindings as production (once the sync PR lands: the same D1 database; see "Household sync"), so
+a household created on a preview is real production data.
+
+Going live before the release PR is possible but not recommended until the new app matches the old one's features: temporarily
+set the **production branch** under **Settings → Builds → Branch control** to the integration branch, do the cutover below, and
+set it back to `main` when the release PR merges.
 
 ## 4. Cutover: move coffee.yaafsome.fyi from Vercel to Cloudflare
 
@@ -108,10 +133,13 @@ HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, frame b
 keeps **Bluetooth for the app itself** and turns off camera, microphone, geolocation, payment, USB, serial and HID, and a CSP:
 `default-src 'self'`, `connect-src 'self'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`.
 
-**Assumption, with a TODO:** the current shell (`index.html`) is a single inline module script plus an inline `<style>`
-block and `style=""` attributes, and loads nothing from other origins. So the CSP allows `'unsafe-inline'` for scripts and
-styles. Once the new app shell has no inline code (CSS in a file, an external module script), remove `'unsafe-inline'` from
-both directives in `_headers`. Keep `connect-src 'self'` unless the app needs another origin.
+**Assumptions, with a TODO:** the *current* shell (`index.html`) is a single inline module script plus an inline `<style>` block
+and `style=""` attributes, and loads nothing from other origins, so the CSP allows `'unsafe-inline'` for scripts and styles for
+now (with `script-src 'self'` today a Cloudflare deploy of the current shell would be a blank page). The new app shell (separate PR)
+loads `app/main.js` and its CSS as external files, so once it is on the integration branch: change `script-src` to `'self'`; and
+`style-src` to `'self'` after its single `style=""` attribute (inside a `<noscript>`) becomes a CSS class (JS that sets
+`element.style.x = ...` is fine under CSP; only `style=""` in markup or `innerHTML` needs `'unsafe-inline'`). `test/hosting.test.mjs`
+fails if the CSP would break the app and shows a TODO when it can be tightened. Keep `connect-src 'self'` unless the app needs another origin.
 
 Cloudflare Access (a login in front of the site) is **not** enabled: it would interrupt the installed app and the
 Bluetooth flow. It is an optional later step if you ever want the whole site private.

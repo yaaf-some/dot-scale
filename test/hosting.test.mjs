@@ -2,7 +2,8 @@
 // security headers stay in place, and Vercel's deploy keeps ignoring the Cloudflare-only files.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 const lines = (f) => read(f).split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
@@ -57,4 +58,38 @@ test('the pages the app loads exist in the repo root (what gets uploaded)', () =
   for (const ref of ['manifest.webmanifest', 'icon.svg']) {
     assert.ok(html.includes(ref) && existsSync(new URL(`../${ref}`, import.meta.url)), ref);
   }
+});
+
+// --- CSP must match what the shell actually does -----------------------------------------------------------------
+const directive = (name) => (read('_headers').match(new RegExp(`Content-Security-Policy:.*?\\b${name} ([^;]*)`)) || [])[1] || '';
+const allowsInline = (name) => directive(name).includes("'unsafe-inline'");
+
+function appJsFiles(dir = new URL('../app/', import.meta.url).pathname) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? appJsFiles(p) : n.endsWith('.js') ? [p] : [];
+  });
+}
+/** What the page does that a strict CSP would block. */
+function inlineUse() {
+  const html = read('index.html');
+  const js = appJsFiles().map((f) => readFileSync(f, 'utf8')).join('\n');
+  return {
+    script: /<script(?![^>]*\bsrc=)[^>]*>\s*\S/i.test(html) || /\son(click|input|change|submit|load|error)\s*=/i.test(html),
+    style: /<style[\s>]/i.test(html) || /\sstyle\s*=/i.test(html)
+      || /\sstyle\s*=\s*["'\\]/.test(js) || /setAttribute\(\s*['"]style['"]/.test(js),
+  };
+}
+
+test("CSP doesn't block what index.html and app/ actually do (inline script/style need 'unsafe-inline')", () => {
+  const use = inlineUse();
+  if (use.script) assert.ok(allowsInline('script-src'), "index.html has an inline script: script-src needs 'unsafe-inline' or the app is blank on Cloudflare");
+  if (use.style) assert.ok(allowsInline('style-src'), "the page uses inline styles: style-src needs 'unsafe-inline' or they are dropped");
+});
+
+test("CSP can be tightened: no 'unsafe-inline' for script/style once nothing needs it", { todo: 'tighten _headers (see the TODO there) after the new app shell lands' }, () => {
+  const use = inlineUse();
+  assert.ok(!(allowsInline('script-src') && !use.script), "script-src still allows 'unsafe-inline' but nothing inline remains: use script-src 'self'");
+  assert.ok(!(allowsInline('style-src') && !use.style), "style-src still allows 'unsafe-inline' but nothing inline remains: use style-src 'self'");
 });

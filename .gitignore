@@ -1,6 +1,11 @@
-.vercel
+*.key
+*.pem
 .DS_Store
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.vercel
+.wrangler/
 Thumbs.db
 node_modules
-.wrangler
-.dev.vars*
