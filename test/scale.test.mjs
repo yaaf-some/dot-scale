@@ -152,3 +152,13 @@ test('BLE: parser reassembles frames notified in pieces', async () => {
   assert.deepEqual(got, [30]);
   await scale.disconnect();
 });
+
+test('BLE: autoConnect does not reconnect after a deliberate disconnect', async () => {
+  const fb = fakeBluetooth();
+  const prefs = { get: (k) => (k === 'knownScale' ? { id: 'dev-1' } : undefined), set() {} };
+  const scale = createScale({ bluetooth: fb.bluetooth, prefs, sleep: instant });
+  await scale.connect();
+  await scale.disconnect();
+  assert.equal(await scale.autoConnect(), false);
+  assert.equal(scale.state.status, 'disconnected');
+});

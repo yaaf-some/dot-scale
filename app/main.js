@@ -77,6 +77,7 @@ async function show(route, { sameView = false } = {}) {
   const root = h('div', { class: 'view', dataset: { view: name } });
 
   const swap = async () => {
+    if (token !== navToken) return;
     setChildren(host, root);
     shell.dataset.chrome = meta.chrome ?? 'tabs';
     renderTabs(name);
@@ -85,6 +86,11 @@ async function show(route, { sameView = false } = {}) {
     try { cleanup = await mod.mount(root, ctx); } catch (e) {
       console.error(`view "${name}" crashed`, e);
       setChildren(root, h('div', { class: 'empty' }, h('h2', {}, 'Something went wrong'), h('p', {}, 'This screen couldn’t load. Go back to Home and try again.'), h('a', { class: 'btn primary', href: '#/home' }, 'Back to Home')));
+    }
+    if (token !== navToken) { // a newer navigation took over while this view was mounting: tear this one down
+      controller.abort();
+      try { typeof cleanup === 'function' && cleanup(); } catch (e) { console.error(e); }
+      return;
     }
     current = { name, key: route.path, controller, cleanup: typeof cleanup === 'function' ? cleanup : null, meta };
     window.scrollTo(0, scrollY);

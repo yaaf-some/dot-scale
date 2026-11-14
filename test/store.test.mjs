@@ -137,3 +137,10 @@ test('clearAll wipes records, meta and prefs', async () => {
 });
 
 test('uuid looks like a v4 uuid', () => assert.match(uuid(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
+
+test('applyRemote: the newest version of an id wins regardless of order within a batch', async () => {
+  const { store } = fresh();
+  await store.adapter.put({ id: 'x', type: 'bean', name: 'local', updatedAt: 50 });
+  await store.applyRemote([{ id: 'x', type: 'bean', name: 'new', updatedAt: 200 }, { id: 'x', type: 'bean', name: 'old', updatedAt: 100 }]);
+  assert.equal((await store.get('x')).name, 'new');
+});

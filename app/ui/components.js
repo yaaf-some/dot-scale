@@ -49,7 +49,7 @@ export function emptyState({ iconName, title, text, actions = [] }) {
 export function liveBlock(ctx, types, build) {
   const box = h('div', { class: 'live-block' });
   let n = 0;
-  const paint = async () => { const mine = ++n; const node = await build(); if (mine === n && box.isConnected !== false) box.replaceChildren(node); };
+  const paint = async () => { const mine = ++n; const node = await build(); if (mine === n) box.replaceChildren(node); };
   paint();
   ctx.store.on('change', (e) => { if (types.includes(e.type)) paint(); }, { signal: ctx.signal });
   return box;

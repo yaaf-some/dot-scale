@@ -70,7 +70,7 @@ registerSettingsSection({
       group(
         h('div', { class: 'row stack' }, scaleLine(ctx), info),
         h('div', { class: 'row' }, h('div', { class: 'row-main' }, nameIn),
-          gate(h('button', { class: 'btn small', type: 'button', onclick: () => { scale.rename(nameIn.value); nameIn.value = ''; ctx.toast('Scale renamed'); } }, 'Rename'))),
+          gate(h('button', { class: 'btn small', type: 'button', onclick: () => { if (!nameIn.value.trim()) return ctx.toast('Type a new name first.'); scale.rename(nameIn.value); nameIn.value = ''; ctx.toast('Scale renamed'); } }, 'Rename'))),
         h('div', { class: 'row' }, h('div', { class: 'row-main' }, h('span', { class: 'row-title' }, 'Turn scale off')),
           gate(h('button', { class: 'btn small', type: 'button', onclick: () => scale.powerOff() }, 'Turn off'))),
         h('div', { class: 'row' }, h('div', { class: 'row-main' }, h('span', { class: 'row-title' }, 'Forget old app pairing'), h('span', { class: 'row-sub' }, 'Clears the pairing the Timemore app left on the scale. It reboots; reconnect afterwards.')),
@@ -99,9 +99,17 @@ registerSettingsSection({
   render: (ctx) => {
     const { scale, prefs } = ctx;
     const log = h('pre', { class: 'log', 'aria-label': 'Scale log', tabindex: 0 });
-    const paint = () => { log.textContent = scale.logLines.map((l) => `${l.time.toLocaleTimeString()}  ${l.text}`).join('\n'); log.scrollTop = log.scrollHeight; };
-    paint();
-    scale.on('log', paint, { signal: ctx.signal });
+    const fmt = (l) => `${l.time.toLocaleTimeString()}  ${l.text}\n`;
+    let scrollPending = false;
+    const toBottom = () => { if (!scrollPending) { scrollPending = true; requestAnimationFrame(() => { scrollPending = false; log.scrollTop = log.scrollHeight; }); } };
+    const paintAll = () => { log.textContent = scale.logLines.map(fmt).join(''); toBottom(); };
+    let details; // set below; the log only does work while the section is open
+    scale.on('log', (line) => {
+      if (!details?.open) return;
+      log.append(fmt(line));
+      while (log.childNodes.length > 200) log.firstChild.remove();
+      toBottom();
+    }, { signal: ctx.signal });
     const raw = h('input', { type: 'text', placeholder: 'opcode cmd payload… e.g. 02 05', 'aria-label': 'Raw command in hex', autocomplete: 'off', autocapitalize: 'off' });
     const sendRaw = () => {
       const b = raw.value.trim().split(/[\s,]+/).filter(Boolean).map((x) => parseInt(x, 16));
@@ -113,7 +121,7 @@ registerSettingsSection({
       onchange: (on) => (on ? scale.startDemo() : scale.disconnect()),
     });
     scale.on('status', () => { const i = demo.querySelector('input'); i.checked = scale.state.mode === 'demo' && scale.state.status === 'connected'; }, { signal: ctx.signal });
-    return h('section', { class: 'section', id: 'advanced' }, h('details', { class: 'adv' },
+    details = h('details', { class: 'adv', ontoggle: () => details.open && paintAll() },
       h('summary', {}, 'Advanced'),
       h('div', { class: 'section' },
         group(demo, switchRow({ title: 'Log weight frames too', sub: 'About ten lines per second.', checked: prefs.get('logWeight', false), onchange: (v) => prefs.set('logWeight', v) })),
@@ -123,7 +131,8 @@ registerSettingsSection({
         log,
         h('div', {}, h('button', { class: 'btn danger', type: 'button', onclick: async () => {
           if (await confirmDialog({ title: 'Erase everything on this device?', message: 'Profiles, gear, beans, brews and settings stored in this browser are deleted. Data already synced to a household is not affected.', confirmLabel: 'Erase data', danger: true })) await ctx.store.clearAll();
-        } }, 'Erase data on this device')))));
+        } }, 'Erase data on this device'))));
+    return h('section', { class: 'section', id: 'advanced' }, details);
   },
 });
 

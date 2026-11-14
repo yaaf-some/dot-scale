@@ -68,7 +68,7 @@ function control(f, value) {
     default:
       input = h('input', {
         id, type: f.type ?? 'text', value: value ?? '', placeholder: f.placeholder, required: f.required, maxlength: f.maxlength,
-        inputMode: f.inputMode, step: f.step, min: f.min, autocomplete: 'off', autocapitalize: f.type === 'text' || !f.type ? 'words' : 'off',
+        inputMode: f.inputMode, pattern: f.required && (!f.type || f.type === 'text') ? '.*\\S.*' : undefined, title: f.required ? 'Enter at least one character' : undefined, step: f.step, min: f.min, autocomplete: 'off', autocapitalize: f.type === 'text' || !f.type ? 'words' : 'off',
       });
       read = () => (f.type === 'number' ? (input.value === '' ? undefined : Number(input.value)) : input.value.trim());
   }

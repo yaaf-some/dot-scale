@@ -68,7 +68,9 @@ export async function editGear(store, gear, { kind = 'grinder' } = {}) {
   }
   const { name, ...rest } = v;
   if ('pressurized' in rest) rest.pressurized = rest.pressurized === 'yes';
-  return store.put({ ...(gear ?? { type: 'gear', kind: k }), name, props: { ...props, ...Object.fromEntries(Object.entries(rest).filter(([, x]) => x !== undefined && x !== '')) } });
+  const next = { ...props };
+  for (const [key, val] of Object.entries(rest)) { if (val === undefined || val === '') delete next[key]; else next[key] = val; } // an emptied field clears the value
+  return store.put({ ...(gear ?? { type: 'gear', kind: k }), name, props: next });
 }
 
 export async function editBean(store, bean) {

@@ -32,14 +32,20 @@ export const BLE_FILTERS = [
 
 async function openBle(device, onBytes) {
   const server = await device.gatt.connect();
-  const svc = await server.getPrimaryService(SERVICE);
-  const notify = await svc.getCharacteristic(CHAR_NOTIFY);
-  const writeChar = await svc.getCharacteristic(CHAR_WRITE);
-  notify.addEventListener('characteristicvaluechanged', (e) => {
-    const v = e.target.value;
-    onBytes(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
-  });
-  await notify.startNotifications();
+  let notify, writeChar;
+  try {
+    const svc = await server.getPrimaryService(SERVICE);
+    notify = await svc.getCharacteristic(CHAR_NOTIFY);
+    writeChar = await svc.getCharacteristic(CHAR_WRITE);
+    notify.addEventListener('characteristicvaluechanged', (e) => {
+      const v = e.target.value;
+      onBytes(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
+    });
+    await notify.startNotifications();
+  } catch (e) {
+    try { device.gatt.disconnect(); } catch {} // don't leave a half-open GATT link behind
+    throw e;
+  }
   return {
     kind: 'ble', deviceName: device.name,
     async write(bytes) {
@@ -70,6 +76,7 @@ export function createScale({ bluetooth = globalThis.navigator?.bluetooth, prefs
   let session = 0;            // bumps on every connect/disconnect so stale retry loops stop
   let userDisconnect = false;
   let lastSeconds;
+  let ignoredDisconnects = 0; // gattserverdisconnected events caused by closing an abandoned attempt
 
   const log = (text) => {
     const line = { time: new Date(), text };
@@ -161,12 +168,18 @@ export function createScale({ bluetooth = globalThis.navigator?.bluetooth, prefs
     device = dev;
     dev.addEventListener('gattserverdisconnected', onGattDisconnected);
     setStatus('connecting', 'Connecting…', 'ble');
-    const t = await withTimeout(openBle(dev, onBytes), 15000, 'Connecting');
-    if (mySession !== session) { try { t.disconnect(); } catch {} return; }
+    const attempt = openBle(dev, onBytes);
+    // If the attempt is abandoned (timeout or superseded), close it when it eventually resolves. The disconnect
+    // event that causes is ignored, or it would start another reconnect loop.
+    const abandon = () => attempt.then((late) => { ignoredDisconnects++; try { late.disconnect(); } catch { ignoredDisconnects--; } }, () => {});
+    let t;
+    try { t = await withTimeout(attempt, 15000, 'Connecting'); } catch (e) { abandon(); throw e; }
+    if (mySession !== session) { ignoredDisconnects++; try { t.disconnect(); } catch { ignoredDisconnects--; } return; }
     await attach(t, mySession);
   }
 
   async function onGattDisconnected() {
+    if (ignoredDisconnects > 0) { ignoredDisconnects--; return; }
     if (state.mode !== 'ble' && state.status !== 'reconnecting') return;
     transport = null; setTimerRunning(false);
     if (userDisconnect) { setStatus('disconnected', 'Not connected', null); return; }
@@ -210,7 +223,8 @@ export function createScale({ bluetooth = globalThis.navigator?.bluetooth, prefs
     /** Reconnect to the scale this device used before, without a chooser. Returns true on success. Needs getDevices(). */
     async autoConnect() {
       const known = prefs?.get('knownScale');
-      if (!known || !bluetooth?.getDevices || state.status !== 'disconnected') return false;
+      // A deliberate Disconnect sticks until the user connects again (attach() clears the flag).
+      if (!known || !bluetooth?.getDevices || state.status !== 'disconnected' || userDisconnect) return false;
       const mySession = ++session;
       try {
         const dev = (await bluetooth.getDevices()).find((d) => d.id === known.id);

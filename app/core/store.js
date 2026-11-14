@@ -85,11 +85,15 @@ export function createStore(adapter, { now = Date.now } = {}) {
 
     /** Merge records from the server. Returns how many were applied. */
     async applyRemote(records) {
-      const applied = [];
+      // First collapse the batch to the winning version of each id, so order within a batch can't matter.
+      const best = new Map();
       for (const remote of records ?? []) {
         if (!remote?.id || !remote.type || typeof remote.updatedAt !== 'number') continue;
-        const local = await adapter.get(remote.id);
-        if (remoteWins(local, remote)) applied.push(remote);
+        if (remoteWins(best.get(remote.id), remote)) best.set(remote.id, remote);
+      }
+      const applied = [];
+      for (const remote of best.values()) {
+        if (remoteWins(await adapter.get(remote.id), remote)) applied.push(remote);
       }
       if (applied.length) await adapter.putMany(applied);
       for (const r of applied) emitChange(r, true);
