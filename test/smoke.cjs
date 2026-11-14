@@ -91,6 +91,42 @@ const pw = require('playwright');
 
     check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join('; ') : ''}`);
   } catch (e) { check(false, e.message); }
+
+  // Offline: the service worker registers, caches the shell, and the app reloads (and runs Demo) with no network.
+  const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const off = await ctx.newPage();
+  const offErrors = [];
+  off.on('pageerror', (e) => offErrors.push(e.message));
+  off.on('console', (m) => m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text()) && offErrors.push(m.text()));
+  try {
+    await off.goto(url);
+    const scope = await off.evaluate(() => Promise.race([
+      navigator.serviceWorker.ready.then((r) => r.scope),
+      new Promise((ok) => setTimeout(() => ok('none (timed out)'), 5000)),
+    ]));
+    check(scope === url, `service worker registers (scope ${scope})`);
+    await off.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 5000 });
+    await off.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 5000 });
+    // No file list in sw.js: the page hands over what it loaded on this first visit. Wait until that is cached.
+    await off.waitForSelector('html[data-offline-ready]', { state: 'attached', timeout: 10000 });
+    check(true, 'first-visit files are cached without a file list');
+    // A file the page never loaded (stands in for a new app/ module) is cached the first time it's fetched.
+    await off.evaluate(() => fetch('icons/icon-512.png').then((r) => r.blob()));
+    await off.waitForFunction(async () => !!(await caches.match('icons/icon-512.png')), null, { timeout: 5000, polling: 100 });
+    await ctx.setOffline(true);
+    await off.reload();
+    await off.waitForSelector('.onboard', { timeout: 8000 });
+    check(true, 'app shell and modules load while offline');
+    await off.click('button:has-text("Skip")');
+    await off.waitForSelector('.home-title');
+    await off.click('button:has-text("Try demo")');
+    await off.waitForSelector('.demo-tag', { timeout: 8000 });
+    check(true, 'demo runs offline (app/ modules and protocol.js served from cache)');
+    const lateOk = await off.evaluate(() => fetch('icons/icon-512.png').then((r) => r.ok, () => false));
+    check(lateOk, 'a file first fetched after install is served offline');
+    check(offErrors.length === 0, `no page errors offline${offErrors.length ? ': ' + offErrors.join('; ') : ''}`);
+  } catch (e) { check(false, 'offline: ' + (e.message.split('\n').slice(0, 3).join(' | '))); }
+  await ctx.close().catch(() => {});
   await browser.close(); server.close();
   process.exit(failed ? 1 : 0);
 })();

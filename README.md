@@ -4,6 +4,8 @@ A self-hosted web app for the **Timemore Dot (TES017)** Bluetooth coffee scale, 
 The scale's firmware is left as it is. The app talks to it directly over Web Bluetooth using
 [Timemore's published protocol](https://github.com/TIMEMORE-COFFEE/open-scale-protocol).
 
+> Unofficial hobby project. It is not made by or affiliated with Timemore; "Timemore" and "Dot" belong to their owners.
+
 ## Hosting
 
 The app is plain static files with no build step. It's hosted on **Vercel** at **https://dot-scale.vercel.app**, which redeploys on every push to `main`.

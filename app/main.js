@@ -13,6 +13,7 @@ import { applyTheme } from './ui/theme.js';
 import { icon } from './ui/icons.js';
 import { h, setChildren } from './ui/dom.js';
 import { toast } from './ui/toast.js';
+import { registerServiceWorker } from './pwa.js';
 import './modules.js';
 
 const TABS = [
@@ -125,6 +126,7 @@ async function boot() {
   tryAuto();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tryAuto(); });
 
+  registerServiceWorker();
   window.dotScale = { store, scale }; // handy in the console and in tests
 }
 
