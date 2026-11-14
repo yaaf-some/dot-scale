@@ -21,8 +21,11 @@ cutover steps matters.
 - `_headers`: security headers (below).
 - This guide.
 
-Merging this to `main` changes nothing for visitors by itself: Vercel keeps deploying `main` exactly as before until you
-disconnect it (step 5), and Cloudflare starts deploying `main` once you connect the repo (step 1).
+Merging this to `main` does not change the live site's behaviour: Vercel keeps deploying `main` as before until you disconnect
+it (step 5), and Cloudflare starts deploying `main` once you connect the repo (step 1). One side effect: `main` has no
+`.vercelignore`, so Vercel will also serve the few extra files (`/wrangler.jsonc`, `/_headers`, `/.assetsignore`,
+`/docs/DEPLOY.md`) at `dot-scale.vercel.app` until it is retired. They are all public in this repository anyway, and Vercel
+does not apply `_headers`.
 
 ## 1. Connect the GitHub repo (Workers Builds)
 
@@ -35,9 +38,16 @@ disconnect it (step 5), and Cloudflare starts deploying `main` once you connect 
 
 ## 2. Test on the workers.dev address first
 
-After the first deploy, open the `dot-scale.<your-subdomain>.workers.dev` URL shown on the Worker's page in Chrome (or Bluefy on
-iPhone/iPad), press **Demo**, and check the app works. Vercel is still serving `coffee.yaafsome.fyi`, so nothing is at risk.
-Check the headers and that private files are not served:
+After the first deploy, open the `dot-scale.<your-subdomain>.workers.dev` URL shown on the Worker's page. Vercel is still serving
+`coffee.yaafsome.fyi`, so nothing is at risk. **Do not cut over until all of these pass:**
+
+1. In Chrome: press **Demo** and check the app works.
+2. **On the iPhone/iPad in Bluefy: press Connect and connect the real scale**, then tare. Demo mode does not use Web Bluetooth,
+   and Bluefy (WebKit) was not tested here, so this is the real check that the security headers don't get in the way.
+3. If Connect fails only on this address, loosen the headers one at a time in `_headers` (first remove the
+   `Permissions-Policy` line, then `Cross-Origin-Opener-Policy`, then try without the CSP) and push; the change deploys in a
+   minute. Tell Claude which one it was so the file can be fixed properly.
+4. Check the headers and that private files are not served:
 
 ```
 curl -sI https://dot-scale.<your-subdomain>.workers.dev/ | grep -i -E "strict|content-security|permissions|nosniff"
@@ -50,9 +60,11 @@ curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.work
 Workers Builds builds non-production branches as **preview versions** with their own URL, without touching production or your
 domain.
 
-1. **Workers & Pages → dot-scale → Settings → Builds → Branch control**: builds for non-production branches **on**
-   (non-production deploy command `npx wrangler versions upload`, the default). In a public repo you can limit this to branches you
-   trust.
+1. **Workers & Pages → dot-scale → Settings → Builds → Branch control**: turn builds for non-production branches **on**
+   (non-production deploy command `npx wrangler versions upload`, the default) and **restrict them to a short allow-list of
+   branches you trust** (for example just the one you want to try), not "all branches". This repository is public: a preview
+   build runs that branch's code on your Cloudflare account with the same bindings as production. As far as I know, only branches
+   pushed to this repository are built (not pull requests from forks); check that setting in the dashboard.
 2. **Settings → Domains & Routes**: **Preview URLs** enabled.
 3. Push to the branch. When the build finishes, the preview URL is on the build's page and under the Worker's **Deployments /
    Versions**. A branch gets a stable alias of the form `https://<branch-name-with-dashes>-dot-scale.<your-workers-subdomain>.workers.dev`
@@ -65,7 +77,15 @@ Preview versions use the same bindings as production (once the app has a databas
 ## 4. Cutover: move coffee.yaafsome.fyi from Vercel to Cloudflare
 
 Cloudflare's Worker custom domain creates its **own** DNS record for the name, so the old Vercel CNAME has to go first or it
-conflicts (the attach fails with a message about existing DNS records). Do these in one sitting, in this order:
+conflicts (the attach fails with a message about existing DNS records). That means **`coffee.yaafsome.fyi` is down between steps
+2 and 3** (a few minutes if all goes well; `dot-scale.vercel.app` keeps working). The custom-domain attach and certificate flow
+is untested here, so rehearse it first on a throwaway name that has no DNS record yet:
+
+**Rehearsal (recommended):** add the custom domain `coffee-test.yaafsome.fyi` to the Worker (**Settings → Domains & Routes → Add →
+Custom domain**), wait for it to become active, run the header and 404 checks from step 2 against it and press Connect in
+Bluefy, then remove that domain again. If the attach or the certificate misbehaves, you learn it without any downtime.
+
+Then do the real cutover in one sitting, at a quiet time, in this order:
 
 1. **Write down** the current record: Cloudflare dashboard → `yaafsome.fyi` → **DNS → Records** → the CNAME `coffee` (its target, a
    `vercel-dns.com` name, DNS only). You need it only if you roll back.
