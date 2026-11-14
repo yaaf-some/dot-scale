@@ -6,6 +6,7 @@ export function normalizeCode(input) {
   return String(input ?? '').trim().toLowerCase().replace(/[\s_]+/g, '-');
 }
 
-// Generated codes are `word-word-word-NNNN`; the server accepts a slightly wider shape so the format can grow.
+// Generated codes are `word-word-word-word-NNNN` (4 words + 4 digits, ~45 bits). Older 3-word codes are still valid, and the
+// shape accepted here is slightly wider (3 to 6 dash-separated parts) so the format can grow without breaking existing households.
 const CODE_RE = /^[a-z0-9]+(?:-[a-z0-9]+){2,5}$/;
 export const isValidCodeFormat = (c) => typeof c === 'string' && c.length <= 64 && CODE_RE.test(c);

@@ -35,7 +35,8 @@ Moving to Cloudflare (Worker + static assets, https://coffee.yaafsome.fyi): conf
 - `.vercelignore` keeps tests/scripts/docs (and the Cloudflare-only files) out of the Vercel deployment.
 - `worker/` — Cloudflare Worker (household sync API); `worker/storage.js` is the only file that touches the database (D1).
   `migrations/` is the D1 schema. Sync docs: `docs/SYNC.md`; owner steps: `docs/DEPLOY.md`.
-- `app/sync/client.js` — household sync client (needs the store contract in `docs/SYNC.md`).
+- `app/sync/` — household sync: `client.js` (the client), `store-adapter.js` (app store ↔ client), `boot.js` (started from `main.js`),
+  `settings-section.js` (Settings → Sync). Contract and limits in `docs/SYNC.md`. The Worker needs the `SYNC_PEPPER` secret (`docs/DEPLOY.md`).
 - `.assetsignore` is the same idea for Cloudflare: anything not listed there is **publicly served**, so add new private files to it.
 
 ## View contract (add a screen without touching the shell)

@@ -1,7 +1,7 @@
 // Cloudflare Worker entry. With `assets.run_worker_first: ["/api/*"]` (wrangler.jsonc) only /api/* requests reach
 // this code; everything else is served straight from the static assets without invoking the Worker.
 //
-// Bindings (wrangler.jsonc): DB (D1), ASSETS (static assets). Optional secret: SYNC_PEPPER.
+// Bindings (wrangler.jsonc): DB (D1), ASSETS (static assets). Required secret: SYNC_PEPPER (without it the API answers 503).
 
 import { handleHousehold, handleSync } from './handlers.js';
 import { createD1Storage } from './storage.js';

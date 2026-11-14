@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeServer, routeFetch } from './helpers/world.mjs';
 import { handleHousehold, handleSync } from '../worker/handlers.js';
+import { createD1Storage } from '../worker/storage.js';
 import { compare } from '../worker/records.js';
+import { createStore } from '../app/core/store.js';
+import { memoryAdapter } from '../app/core/store-adapters.js';
+import { syncStoreAdapter } from '../app/sync/store-adapter.js';
 import { createSyncClient, chunkRecords, formatStatus, SyncError, normalizeCode } from '../app/sync/client.js';
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -120,7 +124,7 @@ test('no sync service at all (static host / local dev): app keeps working, statu
   const noApi = async (url) => { calls.push(url); return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } }); };
   const d = w.device({ fetch: noApi });
   d.client.start();
-  await quiesce(() => d.client.whenIdle());
+  await d.client.probe(); // what Settings → Sync does when opened
   assert.equal(d.client.getStatus().state, 'unavailable');
   assert.equal(d.client.getStatus().label, 'Sync not set up');
   await assert.rejects(d.client.createHousehold(), (e) => e instanceof SyncError && e.code === 'no_endpoint');
@@ -139,10 +143,38 @@ test('D1 not bound (503): "Sync not set up", create fails with advice, nothing s
   };
   const w = world();
   const d = w.device({ fetch });
-  d.client.start(); await quiesce(() => d.client.whenIdle());
+  d.client.start(); await d.client.probe(); // what Settings → Sync does when opened
   assert.equal(d.client.getStatus().label, 'Sync not set up');
   await assert.rejects(d.client.createHousehold(), (e) => e.code === 'not_configured' && /D1/.test(e.message));
   assert.equal(d.storage.m.size, 0, 'nothing persisted');
+});
+
+test('SYNC_PEPPER missing (503): "Sync not set up" with the owner advice, create fails, nothing stored', async () => {
+  const w = world();
+  const noPepper = { storage: createD1Storage(w.d1), pepper: '' };
+  const fetch = async (url, init) => {
+    const u = new URL(url, 'https://app.example.test');
+    const req = new Request(u, init);
+    return u.pathname === '/api/household' ? handleHousehold(req, noPepper) : handleSync(req, noPepper);
+  };
+  const d = w.device({ fetch });
+  d.client.start(); await d.client.probe(); // what Settings → Sync does when opened
+  assert.equal(d.client.getStatus().label, 'Sync not set up');
+  assert.match(d.client.getStatus().error.message, /SYNC_PEPPER/);
+  await assert.rejects(d.client.createHousehold(), (e) => e.code === 'not_configured' && /wrangler secret put SYNC_PEPPER/.test(e.message));
+  assert.equal(d.storage.m.size, 0, 'nothing persisted');
+  assert.equal(w.d1.sql('SELECT COUNT(*) n FROM households')[0].n, 0);
+});
+
+test('start() without a household makes no network request at all', async () => {
+  const w = world();
+  const d = w.device();
+  d.client.start();
+  await d.timers.advance(5000);
+  d.env.setVisible(true); d.env.setOnline(true);
+  await d.timers.advance(5000);
+  assert.equal(w.net.requests.length, 0);
+  assert.equal(d.client.getStatus().state, 'off');
 });
 
 test('probe: a configured server answers "available" without creating anything or touching the database', async () => {
@@ -151,7 +183,7 @@ test('probe: a configured server answers "available" without creating anything o
   assert.equal(await d.client.probe(), true);
   assert.equal(w.d1.queries, 0, 'the probe never touches the database');
   assert.equal(w.d1.sql('SELECT COUNT(*) n FROM households')[0].n, 0);
-  d.client.start(); await quiesce(() => d.client.whenIdle());
+  d.client.start(); await d.client.probe(); // what Settings → Sync does when opened
   assert.equal(d.client.getStatus().state, 'off');
 });
 
@@ -181,7 +213,7 @@ test('create → join → edits flow both ways; two devices converge (incl. LWW 
   A.store.put(rec('brew-0001', 100, { v: 'a1' })); A.store.put(rec('brew-0002', 100, { v: 'a2' }));
   A.client.start(); B.client.start();
   const { code, sync } = await A.client.createHousehold();
-  assert.match(code, /^[a-z]+-[a-z]+-[a-z]+-\d{4}$/);
+  assert.match(code, /^[a-z]+-[a-z]+-[a-z]+-[a-z]+-\d{4}$/);
   assert.equal(sync.ok, true);
   assert.equal(A.client.getStatus().state, 'synced');
 
@@ -211,7 +243,7 @@ test('create → join → edits flow both ways; two devices converge (incl. LWW 
 test('join: bad format never hits the network; unknown code is refused and not saved', async () => {
   const w = world();
   const d = w.device();
-  await assert.rejects(d.client.joinHousehold('hello'), (e) => e.code === 'invalid_code' && /maple-tiger-orbit/.test(e.message));
+  await assert.rejects(d.client.joinHousehold('hello'), (e) => e.code === 'invalid_code' && /maple-tiger-orbit-river-4271/.test(e.message) && /four words/.test(e.message));
   assert.equal(w.net.requests.length, 0);
   await assert.rejects(d.client.joinHousehold('maple-tiger-orbit-0000'), (e) => e.code === 'unauthorized' && /Settings/.test(e.message));
   assert.equal(d.client.hasHousehold(), false);
@@ -532,4 +564,73 @@ test('a debounce armed while a sync is failing cannot bypass Retry-After', async
   await D.timers.advance(61_000);
   assert.ok(w.net.requests.length > before, 'retries after Retry-After');
   assert.equal(D.client.getStatus().state, 'synced');
+});
+
+test('two real app stores converge through the store adapter, the client and the Worker (edit, delete, no echo)', async () => {
+  const w = world();
+  const mk = () => {
+    const real = createStore(memoryAdapter(), { now: () => w.clock.t });
+    return { real, ...w.device({ store: syncStoreAdapter(real) }) };
+  };
+  const A = mk(), B = mk();
+  A.client.start(); B.client.start();
+  const beanA = await A.real.put({ type: 'bean', name: 'Guji', roaster: 'Example Roasters' });
+  w.clock.t += 10;
+  await A.real.put({ type: 'profile', name: 'Yaaf' });
+  const { code } = await A.client.createHousehold();
+  await B.client.joinHousehold(code);
+  assert.deepEqual((await B.real.list('bean')).map((x) => x.name), ['Guji']);
+  assert.deepEqual((await B.real.list('profile')).map((x) => x.name), ['Yaaf']);
+
+  w.clock.t += 1000;                                    // B edits; its debounce pushes it
+  await B.real.update(beanA.id, { notes: 'fruity' });
+  await B.timers.advance(1500);
+  await A.client.syncNow();                             // A learns of it at its next sync
+  assert.equal((await A.real.get(beanA.id)).notes, 'fruity');
+
+  w.clock.t += 1000;                                    // A deletes; B sees the tombstone
+  await A.real.delete(beanA.id);
+  await A.timers.advance(1500);
+  await B.client.syncNow();
+  assert.equal(await B.real.get(beanA.id), undefined);
+  assert.equal((await B.real.list('bean', { includeDeleted: true }))[0].deleted, true);
+
+  // nothing bounces back and forth: a sync with no local changes pushes no records, and merging doesn't schedule more syncs
+  const before = w.net.requests.length;
+  await A.timers.advance(10_000); await B.timers.advance(10_000);
+  assert.equal(w.net.requests.length, before, 'no background chatter after convergence');
+  await B.client.syncNow();
+  assert.deepEqual(JSON.parse(w.net.requests.at(-1).body).changes, []);
+});
+
+test('joining or leaving a household tells the store to forget what came from the old one', async () => {
+  const w = world();
+  const seed = w.device(); await seed.client.createHousehold();
+  const code = seed.client.getHouseholdCode();
+  let resets = 0;
+  const store = makeStore(); store.reset = () => { resets++; };
+  const d = w.device({ store });
+  await d.client.joinHousehold(code);
+  assert.equal(resets, 1);
+  d.client.leaveHousehold();
+  assert.equal(resets, 2);
+  await d.client.createHousehold();
+  assert.equal(resets, 3);
+});
+
+test('probe() is remembered for 30 s, can be forced, and a network blip is not remembered', async () => {
+  const w = world();
+  const d = w.device();
+  assert.equal(await d.client.probe(), true);
+  assert.equal(await d.client.probe(), true);
+  assert.equal(w.net.requests.length, 1, 'the second call is served from memory');
+  w.clock.t += 31_000;
+  await d.client.probe();
+  assert.equal(w.net.requests.length, 2, 'asked again after 30 s');
+  await d.client.probe({ force: true });
+  assert.equal(w.net.requests.length, 3, 'force asks again');
+  w.net.down = true;
+  assert.equal(await d.client.probe({ force: true }), false);
+  w.net.down = false;
+  assert.equal(await d.client.probe(), true, 'a failed network attempt is not cached as an answer');
 });
