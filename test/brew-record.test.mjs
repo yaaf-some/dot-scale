@@ -137,3 +137,26 @@ test('chart layout scales to the data and handles too little data', () => {
   assert.ok(L.yG(32) < L.yG(0) && L.x(30) <= 292);
   assert.deepEqual(pointsFromSamples(undefined), []);
 });
+
+test('an interrupted shot is kept as an incomplete Brew, and the finished one replaces it', async () => {
+  const rig = shot();
+  const record = rig.recorder();
+  const { shouldKeepPartial, buildPartialBrew } = await import('../app/core/brew-record.js');
+  assert.equal(shouldKeepPartial(null), false, 'the timer never started');
+  assert.equal(shouldKeepPartial({ yield: 0, timeS: 0.5 }), false);
+  assert.equal(shouldKeepPartial({ yield: 5, timeS: 0 }), true);
+  assert.equal(shouldKeepPartial({ yield: 0, timeS: 4 }), true);
+  const store = createStore(memoryAdapter());
+  const part = buildPartialBrew({ id: 'same', record: { ...record, yield: 12, timeS: 9 }, profile: alexa, recipe: { method: 'espresso' }, startedAt: 5 });
+  assert.equal(part.incomplete, true);
+  assert.ok(part.samples.channels.weight.length > 0);
+  await saveBrew(store, part);
+  await saveBrew(store, buildBrew({ id: 'same', record, profile: alexa, recipe: { method: 'espresso' }, startedAt: 5 }));
+  const all = await store.list('brew');
+  assert.equal(all.length, 1);
+  assert.equal(all[0].incomplete, undefined, 'finishing the shot clears the flag');
+  // incomplete brews never count as history for the coach
+  const later = buildBrew({ id: 'next', record, profile: alexa, recipe: { method: 'espresso' }, startedAt: 50 });
+  const { analysis } = withAnalysis(later, { history: [part] });
+  assert.ok(analysis.verdict);
+});

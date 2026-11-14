@@ -5,7 +5,8 @@
 // Screens live in app/ui/brew/. The session logic is app/core/brew-session.js; this file only moves between screens.
 import { h, setChildren } from '../dom.js';
 import { getMethod } from '../../methods/index.js';
-import { startingRecipe } from '../../core/brew-record.js';
+import { startingRecipe, shouldKeepPartial, buildPartialBrew } from '../../core/brew-record.js';
+import { uuid } from '../../core/store.js';
 import { renderPicker } from '../brew/picker.js';
 import { renderRecipe } from '../brew/recipe.js';
 import { renderPrep } from '../brew/prep.js';
@@ -55,6 +56,7 @@ export async function mount(root, ctx) {
     stage: null,
     go(name) {
       if (name === 'prep' || name === 'live') wake.start(); else wake.stop();
+      if (name === 'prep') F.cancelled = false;
       if (name === 'prep' && !F.run) F.run = createRunner({ scale: ctx.scale, prefs: ctx.prefs, method, recipe: { ...F.recipe, ...(F.beanId ? { beanId: F.beanId } : {}) }, history: F.history, profileId: profile?.id });
       if (name === 'recipe') endRun();
       closeStage();
@@ -67,7 +69,11 @@ export async function mount(root, ctx) {
       scrollTo(0, 0);
     },
     /** Abandon the brew: nothing is saved. Back to the recipe. */
-    cancel() { F.go('recipe'); },
+    cancel() {
+      F.cancelled = true;
+      if (F.brewId) { store.delete(F.brewId).catch(() => {}); F.brewId = null; } // an interrupted copy saved earlier goes too
+      F.go('recipe');
+    },
     /** Finished (saved or discarded): leave the flow. */
     done() { ctx.navigate('/home'); },
   };
@@ -76,6 +82,25 @@ export async function mount(root, ctx) {
   const closeStage = () => { try { stageCleanup?.(); } catch (e) { console.error(e); } stageCleanup = null; };
   const endRun = () => { F.run?.destroy(); F.run = null; };
 
+  // A shot that has started is never lost: leaving the live screen by any route (Back, swipe-back, tab, page hidden) saves
+  // the run so far as an `incomplete` Brew. If the shot carries on, the finished brew replaces it (same id).
+  const keepPartial = () => {
+    if (F.stage !== 'live' || !F.run || F.cancelled || F.run.state.phase !== 'running') return;
+    const record = F.run.session.record();
+    if (!shouldKeepPartial(record)) return;
+    F.brewId ??= uuid();
+    const startedAt = F.run.startedAt ?? Date.now() - record.timeS * 1000;
+    store.put(buildPartialBrew({ id: F.brewId, record, profile, recipe: F.recipe, recipeId: F.recipeId, beanId: F.beanId, startedAt })).catch((e) => console.error('saving the interrupted brew failed', e));
+  };
+  const onHide = () => { if (document.visibilityState === 'hidden') keepPartial(); };
+  document.addEventListener('visibilitychange', onHide);
+  addEventListener('pagehide', keepPartial);
+
   F.go('recipe');
-  return () => { closeStage(); endRun(); wake.stop(); };
+  return () => {
+    keepPartial();
+    document.removeEventListener('visibilitychange', onHide);
+    removeEventListener('pagehide', keepPartial);
+    closeStage(); endRun(); wake.stop();
+  };
 }

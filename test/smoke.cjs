@@ -108,6 +108,17 @@ const pw = require('playwright');
       await page.waitForFunction(() => { const b = document.querySelector('[data-testid="use-dose"]'); return b && !b.disabled; }, null, { timeout: 8000 });
       await page.click('[data-testid="use-dose"]');
     };
+    // leaving the live screen mid-brew (Back / swipe-back) keeps the shot as an incomplete Brew
+    await begin('french-press');
+    await page.waitForSelector('[data-testid="live-weight"]', { timeout: 10000 });
+    await demo('pour');
+    await page.waitForSelector('.brew-stage[data-phase="running"]', { timeout: 20000 });
+    await page.waitForFunction(() => parseFloat(document.querySelector('[data-testid="live-weight"]').textContent) > 20, null, { timeout: 8000 });
+    await page.evaluate(() => { location.hash = '#/home'; });
+    await page.waitForSelector('.home-title');
+    await page.waitForFunction(async () => (await window.dotScale.store.list('brew')).some((b) => b.method === 'french-press' && b.incomplete), null, { timeout: 5000 });
+    const partial = (await brewsOf('french-press')).find((b) => b.incomplete);
+    check(partial.samples.channels.weight.length > 10 && partial.yield > 10, `leaving the live screen mid-brew keeps the shot (incomplete, ${partial.samples.channels.weight.length} samples)`);
     // pour-over: dose, auto-tare, pour the bloom (the timer starts by itself), finish
     await begin('pour-over');
     await page.waitForSelector('[data-testid="live-weight"]', { timeout: 10000 });

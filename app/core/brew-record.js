@@ -128,9 +128,19 @@ export function buildBrew({ id = uuid(), record, profile, recipe, recipeId, bean
   return brew;
 }
 
+/** A shot that has started is worth keeping even if the user leaves before it ends (Back, swipe-back, tab, page hidden). */
+export function shouldKeepPartial(record) {
+  return !!record && (record.yield > 0 || record.timeS >= 2);
+}
+
+/** What is saved when a started brew is interrupted: the run so far, marked `incomplete`. Saving the finished brew under the same id replaces it. */
+export function buildPartialBrew(args) {
+  return { ...buildBrew(args), incomplete: true };
+}
+
 /** analyze() with this brew's context. `history` = earlier brews (any), `bean` = the Bean record, `recipe` supplies planned steps. */
 export function analyzeBrew(brew, { history = [], bean = null, recipe = null, steps = null } = {}) {
-  const earlier = history.filter((b) => live(b) && b.id !== brew.id && (b.startedAt ?? 0) < brew.startedAt);
+  const earlier = history.filter((b) => live(b) && !b.incomplete && b.id !== brew.id && (b.startedAt ?? 0) < brew.startedAt);
   return analyze(brew, { method: brew.method, gear: brew.gear, history: earlier, bean, recipe, steps: steps ?? recipe?.steps ?? null });
 }
 
