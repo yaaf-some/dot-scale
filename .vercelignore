@@ -3,3 +3,8 @@ scripts/
 CLAUDE.md
 .claude/
 docs/
+worker/
+migrations/
+wrangler.jsonc
+.assetsignore
+_headers

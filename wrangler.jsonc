@@ -1,0 +1,32 @@
+// Cloudflare Worker + static assets for Dot Scale. No build step: wrangler bundles worker/index.js itself and
+// uploads the repo root as static assets (everything private is excluded by .assetsignore).
+{
+  "name": "dot-scale",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+
+  // Serve the app from the repo root; only /api/* runs the Worker first (static files never invoke it).
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // D1 database for household sync. Create it once and paste its id here (docs/DEPLOY.md, "Household sync"):
+  //   npx wrangler d1 create dot-scale
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dot-scale",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
+  "workers_dev": true
+
+  // Custom domain: add coffee.yaafsome.fyi in the dashboard AFTER removing the old Vercel CNAME (docs/DEPLOY.md, step 4).
+  // To pin it in this file instead, add (only once that DNS record is gone, or the deploy fails):
+  //   "routes": [{ "pattern": "coffee.yaafsome.fyi", "custom_domain": true }]
+}

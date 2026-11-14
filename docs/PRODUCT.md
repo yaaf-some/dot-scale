@@ -70,7 +70,10 @@ Navigation: a bottom tab bar on phones and a side rail on iPad/wide screens (con
 - A list grouped by day, filterable by profile, method and bean. Each row: method icon, bean, ratio, time, stars, a sparkline.
 - Detail: the full curve, metrics, insights, taste, notes, and edit/delete. **Compare** overlays two brews.
 - **Dial-in trail per bean:** the sequence of shots with grind changes and outcomes. This shows learning over time.
-- Export/import JSON (backup), CSV export.
+- Export/import JSON (backup), CSV export. A backup is `{ format: 'dot-scale', version: 3, records }` (profiles, gear, beans, recipes, brews, live records only).
+  Import merges per id, newest `updatedAt` wins, ties keep the local copy; it also reads the old app's `dot-scale-history` export (brews go to the active profile).
+  CSV cells that start with `= + - @` are prefixed with `'` so spreadsheets don't run them.
+- Home nudge dismissals are device-local (`prefs.nudgeDismissed`); Learn "seen" marks are device-local per profile (`prefs.learnSeen:<profileId>`).
 
 ### Learn
 - Cards of 3–6 sentences each, one idea per card, with a diagram where it helps. They are surfaced *in context* (the result screen links the card behind
@@ -145,8 +148,11 @@ The live site stays on Vercel until the owner cuts over; nothing here may break 
   consistency can't give. All storage sits behind one small adapter with an in-memory fake for tests. No `api/` directory (Vercel would
   treat it as functions).
 - **API:** `POST /api/household` → `{ code }`; `POST /api/sync` with `Authorization: Bearer <code>` and body `{ since, changes }` →
-  `{ rev, changes }`. Merge per record by last-writer-wins on `updatedAt` (ties by id); deletes are tombstones. Limits: 1 MB per request,
-  a record cap per household, rate limit by household hash.
+  `{ rev, changes, more, accepted, rejected, reset }`. Merge per record by last-writer-wins on `updatedAt` (ties by id); deletes are
+  tombstones (the server keeps only the envelope). The response is paged (`more` → call again with `since = rev`), `rejected` lists
+  records refused with a reason, and `reset` means the server lost its data so the client re-pushes everything. Limits: 1 MB per
+  request, 15 records per request, 256 KB per record, 20k records per household, rate limit by household hash. Details, the
+  storage adapter and the store contract (`changesSince`/`applyRemote`) are in `docs/SYNC.md`.
 - **Security:** `_headers` with HSTS, nosniff, referrer policy, a CSP as tight as the shell allows (`'unsafe-inline'` is acceptable
   temporarily until the new shell removes inline scripts/styles; tighten afterwards) and a Permissions-Policy that keeps Bluetooth for
   the app itself. Never log codes or tokens. Cloudflare Access is optional later (it would interrupt the installed app).
@@ -204,7 +210,8 @@ Defaults are well-known community starting points (cite the source in a comment)
   app/learn/            card content
   app/sync/             client sync (tested with fake fetch)
   app/ui/               views + components + styles (tokens in one CSS file)
-  api/                  Vercel functions (household, sync)
+  worker/               Cloudflare Worker: API handlers + the one storage adapter (D1)
+  migrations/           D1 schema
   protocol.js           unchanged BLE protocol
   ```
 - Test: `npm run check` (unit + Playwright smoke via Demo mode). Each workstream adds tests for what it adds.
