@@ -6,7 +6,7 @@ The scale's firmware is left as it is. The app talks to it directly over Web Blu
 
 ## Hosting
 
-The app is plain static files with no build step. It's hosted on **Vercel**, which deploys on every push to `main`.
+The app is plain static files with no build step. It's hosted on **Vercel** at **https://dot-scale.vercel.app**, which redeploys on every push to `main`.
 Open the Vercel URL in Chrome (Android, desktop) or **Bluefy** (iPhone; Safari has no Web Bluetooth).
 Bluetooth runs between the scale and whatever device has the page open, so no computer needs to stay on.
 
