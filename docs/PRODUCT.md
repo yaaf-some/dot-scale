@@ -70,7 +70,10 @@ Navigation: a bottom tab bar on phones and a side rail on iPad/wide screens (con
 - A list grouped by day, filterable by profile, method and bean. Each row: method icon, bean, ratio, time, stars, a sparkline.
 - Detail: the full curve, metrics, insights, taste, notes, and edit/delete. **Compare** overlays two brews.
 - **Dial-in trail per bean:** the sequence of shots with grind changes and outcomes. This shows learning over time.
-- Export/import JSON (backup), CSV export.
+- Export/import JSON (backup), CSV export. A backup is `{ format: 'dot-scale', version: 3, records }` (profiles, gear, beans, recipes, brews, live records only).
+  Import merges per id, newest `updatedAt` wins, ties keep the local copy; it also reads the old app's `dot-scale-history` export (brews go to the active profile).
+  CSV cells that start with `= + - @` are prefixed with `'` so spreadsheets don't run them.
+- Home nudge dismissals are device-local (`prefs.nudgeDismissed`); Learn "seen" marks are device-local per profile (`prefs.learnSeen:<profileId>`).
 
 ### Learn
 - Cards of 3–6 sentences each, one idea per card, with a diagram where it helps. They are surfaced *in context* (the result screen links the card behind

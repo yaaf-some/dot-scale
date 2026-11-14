@@ -92,6 +92,119 @@ const pw = require('playwright');
     check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join('; ') : ''}`);
   } catch (e) { check(false, e.message); }
 
+  // ---- Journal and Learn: seed brews through the store, then use the real screens ----
+  try {
+    const jctx = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
+    const jp = await jctx.newPage();
+    track(jp);
+    await jp.goto(url);
+    await jp.waitForSelector('.onboard');
+    await jp.click('button:has-text("Skip")');
+    await jp.waitForSelector('.home-title');
+    check(await jp.locator('.nudge[data-nudge^="run-"], .nudge[data-nudge^="dialled-"]').count() === 0, 'Home shows no history nudge before there is history');
+    await jp.evaluate(async () => {
+      const { store } = window.dotScale;
+      const profile = (await store.list('profile')).sort((a, b) => a.createdAt - b.createdAt)[0];
+      store.prefs.set('activeProfile', profile.id);
+      const bean = await store.put({ type: 'bean', name: 'Ethiopia Guji', roaster: 'Test Roasters' });
+      // Synthetic 10 Hz shot: flow ramps in 3 s after the first drops, stops at the target, short tail.
+      const shot = (firstDrop, flow, stopAt) => {
+        const w = [], f = []; let g = 0, stopT = null, t = 0;
+        while (t < 60) {
+          let fl = t >= firstDrop && stopT == null ? flow * Math.min(1, (t - firstDrop) / 3) : 0;
+          if (stopT == null && g >= stopAt) stopT = t;
+          if (stopT != null) { fl = Math.max(0, 1.2 * (1 - (t - stopT) / 2)); if (t - stopT > 2) break; }
+          g += fl / 10; w.push(Math.round(g * 10) / 10); f.push(Math.round(fl * 100) / 100); t += 0.1;
+        }
+        return { samples: { hz: 10, t0: 0, channels: { weight: w, flow: f } }, yield: w[w.length - 1], timeS: Math.round((stopT ?? t) * 10) / 10 };
+      };
+      const day = 86400000, now = Date.now();
+      const plan = [[4, 2.6, 33, 12, 0], [4, 2.6, 33, 11, 0], [8, 1.7, 30.5, 10, 4], [8, 1.7, 30.5, 10, 5]];
+      for (const [i, [fd, fl, stop, grind, stars]] of plan.entries()) {
+        const s = shot(fd, fl, stop);
+        await store.put({ type: 'brew', profileId: profile.id, method: 'espresso', beanId: bean.id, gear: { portafilter: 'naked', basketG: 16 },
+          startedAt: now - (plan.length - i) * 3600000, dose: 16, targetYield: 32, ratio: +(s.yield / 16).toFixed(2), grind: { value: grind },
+          ...s, metrics: {}, insights: {}, ...(stars ? { taste: { balance: 0, strength: 0, stars } } : {}), notes: i === 0 ? '=cmd|calc' : undefined });
+      }
+      await store.put({ type: 'brew', profileId: profile.id, method: 'pour-over', legacy: true, gear: {}, startedAt: now - 3 * day, dose: 15, yield: 240, targetYield: 240, ratio: 16, timeS: 190, metrics: {}, insights: {} });
+    });
+    await jp.click('a.tab:has-text("Journal")');
+    await jp.waitForSelector('[data-testid="brew-row"]');
+    check(await jp.locator('[data-testid="brew-row"]').count() === 5, 'Journal lists the seeded brews');
+    check(await jp.locator('.day-head').count() >= 2, 'brews are grouped by day');
+    check(await jp.locator('[data-testid="brew-row"] .spark svg path').count() === 4, 'rows with curves show a sparkline (legacy brew has none)');
+    await jp.selectOption('.filters select >> nth=1', 'pour-over');
+    check(await jp.locator('[data-testid="brew-row"]').count() === 1, 'method filter narrows the list');
+    await jp.selectOption('.filters select >> nth=1', 'all');
+    await jp.click('[data-testid="brew-row"]:has-text("Earlier app")');
+    await jp.waitForSelector('.note:has-text("earlier version")');
+    check(true, 'a legacy brew (no curve) opens with an explanation, not a broken chart');
+    await jp.goBack();
+    await jp.waitForSelector('[data-testid="brew-row"]');
+    await jp.locator('[data-testid="brew-row"]:has-text("Ethiopia Guji")').first().click();
+    await jp.waitForSelector('canvas[aria-label^="Weight and flow"]');
+    const drawn = () => { const c = document.querySelector('canvas'); if (!c.width) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n > 2000; };
+    check(await jp.waitForFunction(drawn, null, { timeout: 5000 }).then(() => true, () => false), 'the detail chart actually draws');
+    check(await jp.locator('.verdict').count() === 1 && await jp.locator('.metrics .metric').count() >= 4, 'detail shows metrics and the recomputed verdict');
+    await jp.click('button:has-text("Compare…")');
+    await jp.click('dialog[open] button:has-text("Compare")');
+    await jp.waitForSelector('.cmp');
+    check(await jp.locator('.cmp tbody tr').count() >= 6 && await jp.locator('canvas').count() === 1, 'Compare overlays two curves with a side-by-side table');
+    await jp.goBack(); await jp.waitForSelector('canvas');
+    await jp.click('a:has-text("Dial-in trail")');
+    await jp.waitForSelector('[data-testid="trail-shot"]');
+    check(await jp.locator('[data-testid="trail-shot"]').count() === 4 && await jp.locator('.trail .badge:has-text("Dialled in")').count() === 1, 'dial-in trail lists the shots and flags the dialled-in one');
+    await jp.goBack(); await jp.waitForSelector('canvas');
+    await jp.click('button:has-text("Edit")');
+    await jp.fill('dialog[open] textarea', 'Sweet and juicy');
+    await jp.click('dialog[open] button:has-text("Save")');
+    await jp.waitForSelector('.notes:has-text("Sweet and juicy")');
+    check(true, 'editing a brew saves taste and notes');
+    await jp.click('a.tab:has-text("Journal")');
+    await jp.waitForSelector('[data-testid="brew-row"]');
+    await jp.click('button:has-text("Backup")');
+    const [jsonDl] = await Promise.all([jp.waitForEvent('download'), jp.click('dialog[open] button:has-text("Export JSON")')]);
+    const jsonText = require('fs').readFileSync(await jsonDl.path(), 'utf8');
+    const parsed = JSON.parse(jsonText);
+    check(parsed.format === 'dot-scale' && parsed.records.filter((r) => r.type === 'brew').length === 5, 'JSON export contains the brews');
+    const [csvDl] = await Promise.all([jp.waitForEvent('download'), jp.click('dialog[open] button:has-text("Export CSV")')]);
+    const csv = require('fs').readFileSync(await csvDl.path(), 'utf8');
+    check(csv.split('\r\n').length >= 7 && csv.includes("'=cmd|calc"), 'CSV export has a row per brew and defuses formulas');
+    // Import the JSON back: same ids and updatedAt, so nothing changes; a copy with a newer edit updates one brew.
+    const edited = JSON.parse(jsonText);
+    const target = edited.records.find((r) => r.type === 'brew' && r.legacy);
+    target.notes = 'Imported note'; target.updatedAt += 100000;
+    const importPath = require('path').join(require('os').tmpdir(), `dot-scale-smoke-import-${process.pid}.json`);
+    require('fs').writeFileSync(importPath, JSON.stringify(edited));
+    await jp.setInputFiles('dialog[open] input[type=file]', importPath);
+    await jp.waitForSelector('dialog[open] [role=status]:has-text("1 updated")');
+    check(true, 'import merges by id: only the newer edit is applied');
+    await jp.click('dialog[open] button:has-text("Done")');
+    // Learn
+    await jp.click('a.tab:has-text("Learn")');
+    await jp.waitForSelector('[data-testid="learn-card"]');
+    const all = await jp.locator('[data-testid="learn-card"]').count();
+    await jp.click('button.pill:has-text("Espresso")');
+    check(await jp.locator('[data-testid="learn-card"]').count() < all, 'Learn filters by topic');
+    await jp.goto(url + '#/learn?card=ratio-and-strength');
+    await jp.waitForSelector('.article h1:has-text("Ratio sets strength")');
+    check(await jp.locator('.article svg.diagram').count() === 1 && await jp.locator('.article svg.diagram script').count() === 0, 'a card deep link opens it with its diagram');
+    await jp.click('a.back');
+    await jp.waitForSelector('.learn-progress');
+    check(await jp.locator('.dot-new.read').count() === 1, 'the opened card is marked as seen');
+    // Home nudge
+    await jp.click('a.tab:has-text("Home")');
+    await jp.waitForSelector('.home-title');
+    check(await jp.locator('.nudge[data-nudge^="dialled-"]').count() === 1, 'Home shows a dialled-in note from the history');
+    await jp.click('.nudge button:has-text("Dismiss")');
+    await jp.waitForFunction(async () => !!(await window.dotScale.store.getMeta('pref:nudgeDismissed')), null, { timeout: 5000 }); // persisted before we reload
+    await jp.reload();
+    await jp.waitForSelector('.home-title');
+    check(await jp.locator('.nudge[data-nudge^="dialled-"]').count() === 0, 'a dismissed nudge stays dismissed');
+    check(errors.length === 0, `no page errors in Journal/Learn${errors.length ? ': ' + errors.join('; ') : ''}`);
+    await jctx.close();
+  } catch (e) { check(false, 'journal/learn: ' + e.message.split('\n').slice(0, 3).join(' | ')); }
+
   // Offline: the service worker registers, caches the shell, and the app reloads (and runs Demo) with no network.
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   const off = await ctx.newPage();
