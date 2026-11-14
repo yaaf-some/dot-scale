@@ -1,0 +1,14 @@
+# Security headers for the static app (Workers static assets). API responses set their own headers in worker/handlers.js.
+#
+# CSP assumptions: the current shell (index.html) is one inline <script type="module">, an inline <style> block and
+# style="" attributes, and loads nothing from other origins. Hence 'unsafe-inline' for script and style for now.
+# TODO(security): once the new app shell has no inline script/styles, drop 'unsafe-inline' from both directives
+# (move CSS to a file; use a hashed or external module script).
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: bluetooth=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), interest-cohort=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

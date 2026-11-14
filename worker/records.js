@@ -1,11 +1,12 @@
 // Record envelope validation and last-writer-wins comparison (PRODUCT.md §6, §7).
-// Pure functions, no I/O.
+// Pure functions, no I/O, no Node-only APIs (runs in a Cloudflare Worker).
 
 const ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const TYPE_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_FUTURE_MS = 24 * 60 * 60 * 1000; // a wrong device clock must not win forever
 
-export function byteLength(s) { return Buffer.byteLength(s, 'utf8'); }
+const encoder = new TextEncoder();
+export function byteLength(s) { return encoder.encode(s).length; }
 
 /** JSON with sorted keys, so equal content always compares equal regardless of key order. */
 export function stableStringify(v) {

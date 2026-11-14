@@ -27,7 +27,7 @@ export const isValidCodeFormat = (c) => typeof c === 'string' && c.length <= 64 
  * Split records into request-sized chunks so a push never nears the server's 1 MB limit
  * (brew records carry sample arrays). Records over `maxRecordBytes` can't be synced: returned in `oversize`.
  */
-export function chunkRecords(records, { maxBytes = 256 * 1024, maxRecords = 100, maxRecordBytes = MAX_RECORD_BYTES } = {}) {
+export function chunkRecords(records, { maxBytes = 256 * 1024, maxRecords = 20, maxRecordBytes = MAX_RECORD_BYTES } = {}) {
   const chunks = [], oversize = [];
   let cur = [], bytes = 0;
   for (const r of records) {
@@ -89,7 +89,7 @@ export function createSyncClient({
   debounceMs = 1500,
   maxWaitMs = 15000, // under constant edits, still sync at least this often
   chunkBytes = 256 * 1024,
-  chunkSize = 100,
+  chunkSize = 20, // the server accepts at most 20 records per request (LIMITS.maxChangesPerRequest)
   backoffBaseMs = 2000,
   backoffMaxMs = 5 * 60 * 1000,
   unavailableRetryMs = 10 * 60 * 1000,
@@ -124,7 +124,7 @@ export function createSyncClient({
 
   // ---- scheduling ------------------------------------------------------------------------------------------
   let timer = null, timerDue = 0, blockedUntil = 0, attempts = 0, fatal = false;
-  let running = null, dirty = false, started = false, applying = false, gen = 0;
+  let running = null, probing = null, dirty = false, started = false, applying = false, gen = 0;
   const cleanups = [];
 
   // `kind` of the pending timer: 'debounce' (a burst of local edits, may be pushed back) or 'run' (retry/immediate).
@@ -378,7 +378,7 @@ export function createSyncClient({
       if (typeof off === 'function') cleanups.push(off);
     }
     if (persisted.code) schedule(0, { force: true });
-    else { setStatus({ state: 'off' }); probe(); }
+    else { setStatus({ state: 'off' }); probing = probe().finally(() => { probing = null; }); }
     return api;
   }
 
@@ -393,7 +393,8 @@ export function createSyncClient({
     getStatus, onStatus,
     getHouseholdCode: () => persisted.code,
     hasHousehold: () => !!persisted.code,
-    whenIdle: () => running ?? Promise.resolve(),
+    /** Resolves when no sync or start-up probe is in flight (handy for tests and "sync, then close" flows). */
+    whenIdle: () => Promise.all([running, probing]).then(() => undefined),
   };
   return api;
 }

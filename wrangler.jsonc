@@ -1,0 +1,32 @@
+// Cloudflare Worker + static assets for Dot Scale. No build step: wrangler bundles worker/index.js itself and
+// uploads the repo root as static assets (everything private is excluded by .assetsignore).
+{
+  "name": "dot-scale",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+
+  // Serve the app from the repo root; only /api/* runs the Worker first (static files never invoke it).
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // D1 database for household sync. Create it once and paste its id here (see docs/DEPLOY.md):
+  //   npx wrangler d1 create dot-scale
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dot-scale",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Custom domain (the yaafsome.fyi zone is already on Cloudflare). Wrangler creates the DNS record and certificate.
+  "routes": [{ "pattern": "coffee.yaafsome.fyi", "custom_domain": true }],
+
+  // The *.workers.dev URL stays on, handy for testing before the cutover; turn it off later if you like.
+  "workers_dev": true,
+  "observability": { "enabled": false }
+}

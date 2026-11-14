@@ -18,10 +18,14 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737).
 - `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
 - `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
-- `.vercelignore` keeps tests/scripts out of the deployment.
+- `.vercelignore` keeps tests/scripts out of the Vercel deployment (and `worker/`, `migrations/`, `wrangler.jsonc`, `_headers`).
+- `worker/` — Cloudflare Worker (household sync API); `worker/storage.js` is the only file that touches the database (D1).
+  `migrations/` is the D1 schema, `wrangler.jsonc` the Worker config, `_headers` the security headers, `.assetsignore` what is
+  never served publicly. Hosting and sync docs: `docs/DEPLOY.md`, `docs/SYNC.md`. No `api/` folder: Vercel would treat it as functions.
+- `app/sync/client.js` — household sync client (needs the store contract in `docs/SYNC.md`).
 
 ## Commands
-- `npm test` — unit tests
+- `npm test` — unit tests (Node 22.13+: the sync tests use the built-in `node:sqlite`)
 - `npm run smoke` — browser smoke test (`SCREENSHOT=/path.png npm run smoke` to capture the page)
 - `npm run check` — both. **Run before every push.**
 

@@ -1,14 +1,15 @@
 // Sync client against fake fetch / fake Upstash / fake store / fake timers. No network, no real Redis.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createFakeUpstash } from './helpers/fake-upstash.mjs';
-import { routeFetch } from './helpers/http.mjs';
-import { createRedis } from '../api/_lib/redis.js';
-import { createHouseholdHandler, createSyncHandler } from '../api/_lib/handlers.js';
-import { compare } from '../api/_lib/records.js';
+import { makeServer, routeFetch } from './helpers/world.mjs';
+import { handleHousehold, handleSync } from '../worker/handlers.js';
+import { compare } from '../worker/records.js';
 import { createSyncClient, chunkRecords, formatStatus, SyncError, normalizeCode } from '../app/sync/client.js';
 
-const settle = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r)); };
+const tick = () => new Promise((r) => setImmediate(r));
+const settle = async () => { for (let i = 0; i < 30; i++) await tick(); };
+/** Wait until the client is idle. WebCrypto runs on a real thread pool, so fixed tick counts are not enough. */
+async function quiesce(idle) { for (let i = 0; i < 4; i++) { await tick(); await idle?.(); } }
 const rec = (id, updatedAt, extra = {}) => ({ id, type: 'brew', updatedAt, ...extra });
 
 function makeStore() {
@@ -26,7 +27,7 @@ function makeStore() {
   };
 }
 
-function makeTimers(clock) {
+function makeTimers(clock, idle) {
   let id = 0; const q = new Map();
   return {
     setTimeout(f, ms) { q.set(++id, { f, due: clock.t + ms }); return id; },
@@ -37,7 +38,7 @@ function makeTimers(clock) {
       for (;;) {
         const next = [...q.entries()].filter(([, x]) => x.due <= target).sort((a, b) => a[1].due - b[1].due)[0];
         if (!next) break;
-        q.delete(next[0]); clock.t = Math.max(clock.t, next[1].due); next[1].f(); await settle();
+        q.delete(next[0]); clock.t = Math.max(clock.t, next[1].due); next[1].f(); await quiesce(idle);
       }
       clock.t = target;
     },
@@ -55,21 +56,25 @@ function makeEnv(online = true) {
 
 const memStorage = () => { const m = new Map(); return { m, getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
 
-/** A server (real handlers + fake Upstash) plus any number of devices that talk to it through a flaky "network". */
+/** A server (real handlers + real D1 adapter on in-memory SQLite) plus devices that reach it through a flaky "network". */
 function world({ limits } = {}) {
-  const clock = { t: 1_700_000_000_000 };
-  const up = createFakeUpstash({ now: () => clock.t });
-  const redis = createRedis({ url: up.url, token: up.token, fetch: up.fetch });
-  const deps = () => ({ redis, now: () => clock.t, limits });
+  const server = makeServer({ limits });
+  const clock = server.clock;
   const net = { down: false, requests: [] };
-  const server = routeFetch({ household: createHouseholdHandler(deps), sync: createSyncHandler(deps), onRequest: (path, init) => net.requests.push({ path, bytes: Buffer.byteLength(init.body || ''), body: init.body }) });
-  const fetch = async (url, init) => { if (net.down) throw new TypeError('Failed to fetch'); return server(url, init); };
+  const routed = routeFetch(server, { onRequest: (path, init) => net.requests.push({ path, bytes: new TextEncoder().encode(init.body || '').length, body: init.body }) });
+  const fetch = async (url, init) => { if (net.down) throw new TypeError('Failed to fetch'); return routed(url, init); };
+  const d1 = server.d1;
+  const db = {
+    outage(on) { d1.failNext = on; },
+    deleteHouseholds() { d1.raw.exec('DELETE FROM households'); },
+    loseRecords() { d1.raw.exec('DELETE FROM records; UPDATE households SET rev = 0'); },
+  };
   function device(opts = {}) {
-    const store = opts.store ?? makeStore(), env = opts.env ?? makeEnv(), timers = makeTimers(clock), storage = opts.storage ?? memStorage();
+    const store = opts.store ?? makeStore(), env = opts.env ?? makeEnv(), timers = makeTimers(clock, () => client.whenIdle()), storage = opts.storage ?? memStorage();
     const client = createSyncClient({ store, fetch: opts.fetch ?? fetch, storage, now: () => clock.t, timers, win: env.win, doc: env.doc, nav: env.nav, random: () => 1, ...opts.client });
     return { store, env, timers, storage, client };
   }
-  return { clock, up, net, device, fetch, deps };
+  return { clock, d1, db, net, device, fetch };
 }
 
 test('formatStatus: the labels the UI shows', () => {
@@ -110,7 +115,7 @@ test('no sync service at all (static host / local dev): app keeps working, statu
   const noApi = async (url) => { calls.push(url); return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } }); };
   const d = w.device({ fetch: noApi });
   d.client.start();
-  await settle();
+  await quiesce(() => d.client.whenIdle());
   assert.equal(d.client.getStatus().state, 'unavailable');
   assert.equal(d.client.getStatus().label, 'Sync not set up');
   await assert.rejects(d.client.createHousehold(), (e) => e instanceof SyncError && e.code === 'no_endpoint');
@@ -120,25 +125,28 @@ test('no sync service at all (static host / local dev): app keeps working, statu
   assert.ok(d.store.recs.has('brew-0001'));
 });
 
-test('Upstash env vars missing (503): "Sync not set up", create fails with advice, nothing stored', async () => {
-  const clock = { t: 1_700_000_000_000 };
-  const noRedis = { now: () => clock.t, redis: null };
-  const fetch = routeFetch({ household: createHouseholdHandler(() => noRedis), sync: createSyncHandler(() => noRedis) });
+test('D1 not bound (503): "Sync not set up", create fails with advice, nothing stored', async () => {
+  const unconfigured = { storage: null };
+  const fetch = async (url, init) => {
+    const path = new URL(url, 'https://app.example.test').pathname;
+    const req = new Request(new URL(url, 'https://app.example.test'), init);
+    return path === '/api/household' ? handleHousehold(req, unconfigured) : handleSync(req, unconfigured);
+  };
   const w = world();
   const d = w.device({ fetch });
-  d.client.start(); await settle();
+  d.client.start(); await quiesce(() => d.client.whenIdle());
   assert.equal(d.client.getStatus().label, 'Sync not set up');
-  await assert.rejects(d.client.createHousehold(), (e) => e.code === 'not_configured' && /Upstash/.test(e.message));
+  await assert.rejects(d.client.createHousehold(), (e) => e.code === 'not_configured' && /D1/.test(e.message));
   assert.equal(d.storage.m.size, 0, 'nothing persisted');
 });
 
-test('probe: a configured server answers "available" without creating anything or touching Redis', async () => {
+test('probe: a configured server answers "available" without creating anything or touching the database', async () => {
   const w = world();
   const d = w.device();
   assert.equal(await d.client.probe(), true);
-  assert.equal(w.up.log.length, 0);
-  assert.equal(w.up.keys().length, 0);
-  d.client.start(); await settle();
+  assert.equal(w.d1.queries, 0, 'the probe never touches the database');
+  assert.equal(w.d1.sql('SELECT COUNT(*) n FROM households')[0].n, 0);
+  d.client.start(); await quiesce(() => d.client.whenIdle());
   assert.equal(d.client.getStatus().state, 'off');
 });
 
@@ -265,16 +273,16 @@ test('the browser coming back online syncs immediately, even in the middle of a 
   assert.equal(d.client.getStatus().state, 'synced');
 });
 
-test('server errors (5xx) retry with backoff and show "Sync problem"; 502 from storage recovers', async () => {
+test('server errors (5xx) retry with backoff and show "Sync problem"; recovers when storage returns', async () => {
   const w = world();
   const d = w.device();
   d.client.start(); await d.client.createHousehold();
-  w.up.state.fail = true;
+  w.db.outage(true);
   d.store.put(rec('brew-0001', 1)); await d.timers.advance(1500);
   const s = d.client.getStatus();
   assert.equal(s.state, 'error'); assert.equal(s.label, 'Sync problem');
   assert.equal(s.error.code, 'server'); assert.ok(s.retryAt > 0);
-  w.up.state.fail = false;
+  w.db.outage(false);
   await d.timers.advance(2000);
   assert.equal(d.client.getStatus().state, 'synced');
 });
@@ -297,7 +305,7 @@ test('unauthorized (household gone / wrong code) stops retrying until the user a
   const w = world();
   const d = w.device();
   d.client.start(); await d.client.createHousehold();
-  w.up.wipe((k) => k.endsWith(':meta')); // household deleted server-side
+  w.db.deleteHouseholds(); // household deleted server-side
   d.store.put(rec('brew-0001', 1)); await d.timers.advance(1500);
   assert.equal(d.client.getStatus().state, 'error');
   assert.equal(d.client.getStatus().error.fatal, true);
@@ -412,7 +420,8 @@ test('state survives a restart: same household, resumes from the saved rev (no f
   w.net.requests.length = 0;
   again.client.start(); await again.timers.advance(0);
   const body = JSON.parse(w.net.requests[0].body);
-  assert.equal(body.since, 2);
+  assert.equal(body.since, w.d1.sql('SELECT rev FROM households')[0].rev, 'resumes from the saved server rev');
+  assert.ok(body.since > 0);
   assert.deepEqual(body.changes, [], 'already-pushed records are not pushed again');
   assert.equal(again.client.getStatus().state, 'synced');
 });
@@ -422,7 +431,7 @@ test('server lost its data: the client notices (reset) and re-pushes everything'
   const A = w.device();
   for (let i = 0; i < 5; i++) A.store.put(rec(`brew-000${i}`, 10 + i));
   A.client.start(); const { code } = await A.client.createHousehold();
-  w.up.wipe((k) => !k.endsWith(':meta') && k.startsWith('dot:hh:')); // records, revs and counter gone; household remains
+  w.db.loseRecords(); // records gone and counter back to 0; the household remains
   A.env.setVisible(true); await A.timers.advance(0);
   assert.equal(A.client.getStatus().state, 'synced');
   const B = w.device(); await B.client.joinHousehold(code);

@@ -1,0 +1,24 @@
+# Files in the repo root that must never be served publicly by Workers static assets (the app is uploaded from "./").
+# Patterns follow .gitignore syntax. The app itself (index.html, protocol.js, app/, icons, manifest, _headers) is served.
+.git
+.gitignore
+.github
+.claude
+.vercelignore
+.assetsignore
+.env*
+.dev.vars*
+.wrangler
+node_modules
+package.json
+package-lock.json
+wrangler.jsonc
+wrangler.toml
+worker
+migrations
+test
+docs
+scripts
+CLAUDE.md
+README.md
+*.ps1
