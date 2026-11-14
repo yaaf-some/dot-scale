@@ -2,7 +2,7 @@
 // `deps` = { storage, now, pepper, limits }. Tests inject their own; worker/index.js builds it from the Worker env.
 //
 // Security notes:
-//  - The household code is a bearer secret. Only an HMAC of it is stored/used; it is never logged.
+//  - The household code is a bearer secret. Only an HMAC of it (keyed with the SYNC_PEPPER secret) is stored; it is never logged.
 //  - Rate limits are keyed by household hash (and, for wrong codes / household creation, by a hash of the caller IP).
 //  - Errors are JSON { error, message }; `message` says what happened and what to do.
 
@@ -36,10 +36,15 @@ export function randomInt(n) {
   return buf[0] % n;
 }
 
-/** e.g. "maple-tiger-orbit-4271": 3 words from 256 (24 bits) + 4 digits (13.3 bits) ≈ 37 bits. */
+export const CODE_WORDS = 4;
+export const CODE_DIGITS = 4;
+/** Entropy of a generated code: 4 words from 256 (32 bits) + 4 digits (13.3 bits) = 45.3 bits. */
+export const CODE_ENTROPY_BITS = CODE_WORDS * Math.log2(WORDS.length) + CODE_DIGITS * Math.log2(10);
+
+/** e.g. "maple-tiger-orbit-river-4271". Older 3-word codes (~37 bits) are still accepted, just no longer generated. */
 export function generateCode(rand = randomInt) {
-  const w = () => WORDS[rand(WORDS.length)];
-  return `${w()}-${w()}-${w()}-${String(rand(10000)).padStart(4, '0')}`;
+  const words = Array.from({ length: CODE_WORDS }, () => WORDS[rand(WORDS.length)]);
+  return `${words.join('-')}-${String(rand(10 ** CODE_DIGITS)).padStart(CODE_DIGITS, '0')}`;
 }
 
 export { normalizeCode, isValidCodeFormat };
@@ -84,6 +89,18 @@ function errorResponse(e) {
 
 const notConfigured = () => new HttpError(503, 'sync_not_configured',
   "Sync isn't set up on this server yet. The site owner needs to create the D1 database and apply its migration (see docs/DEPLOY.md). The app keeps working on this device.");
+
+/** The pepper is the HMAC key material for household hashes. Without a secret one the hashes are only as safe as this public code. */
+export const MIN_PEPPER_LENGTH = 32;
+const pepperMissing = () => new HttpError(503, 'sync_not_configured',
+  `Sync isn't set up on this server yet: the secret SYNC_PEPPER is missing or shorter than ${MIN_PEPPER_LENGTH} characters. ` +
+  'The site owner sets it once with `npx wrangler secret put SYNC_PEPPER` and a long random value (never in the repo); see docs/DEPLOY.md. The app keeps working on this device.');
+
+/** Throws the 503 for a server that isn't fully set up (database bound and a strong enough pepper). */
+function requireConfigured(d) {
+  if (!d.storage) throw notConfigured();
+  if (typeof d.pepper !== 'string' || d.pepper.length < MIN_PEPPER_LENGTH) throw pepperMissing();
+}
 
 const rateLimited = (seconds) => new HttpError(429, 'rate_limited',
   `Too many requests. Wait ${seconds} second${seconds === 1 ? '' : 's'} and try again.`, { retryAfter: seconds });
@@ -130,7 +147,7 @@ export async function handleHousehold(request, rawDeps) {
   try {
     if (request.method !== 'POST') throw methodNotAllowed();
     const d = resolveDeps(rawDeps);
-    if (!d.storage) throw notConfigured();
+    requireConfigured(d);
     const now = d.now();
     const hour = Math.floor(now / 3_600_000);
     const count = await d.storage.hit(`create:${await ipKeyPart(request)}`, hour, (hour + 2) * 3_600_000);
@@ -158,7 +175,7 @@ export async function handleSync(request, rawDeps) {
     if (request.method !== 'POST') throw methodNotAllowed();
     const d = resolveDeps(rawDeps);
     const L = d.limits;
-    if (!d.storage) throw notConfigured();
+    requireConfigured(d);
     const { storage } = d;
 
     const code = bearerCode(request);

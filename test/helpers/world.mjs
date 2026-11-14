@@ -4,8 +4,10 @@ import { createD1Storage } from '../../worker/storage.js';
 import { handleHousehold, handleSync } from '../../worker/handlers.js';
 
 export const T0 = 1_700_000_000_000;
+/** A fake pepper long enough for the server's minimum (never a real secret). */
+export const TEST_PEPPER = 'example-pepper-for-tests-0123456789-abcdefghij';
 
-export function makeServer({ limits, pepper = '' } = {}) {
+export function makeServer({ limits, pepper = TEST_PEPPER } = {}) {
   const clock = { t: T0 };
   const d1 = createD1();
   const storage = createD1Storage(d1);

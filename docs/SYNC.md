@@ -1,7 +1,7 @@
 # Household sync
 
 Sync lets the household's iPhones and iPads share profiles, beans, recipes and brews. It is local-first: the app works
-fully offline and syncs in the background. There are no accounts; a **household code** such as `maple-tiger-orbit-4271`
+fully offline and syncs in the background. There are no accounts; a **household code** such as `maple-tiger-orbit-river-4271`
 is the only secret.
 
 Until the Cloudflare side is set up (`docs/DEPLOY.md`: create the D1 database and apply its migration), sync is simply
@@ -30,8 +30,10 @@ interleave.
 
 ## How it works
 
-- `POST /api/household` creates a household and returns `{ code }`. Code = 3 words from a 256-word list + 4 digits
-  (about 37 bits), generated with WebCrypto. Only an HMAC-SHA256 of the code is stored.
+- `POST /api/household` creates a household and returns `{ code }`. Code = **4 words from a 256-word list + 4 digits =
+  32 + 13.3 = 45.3 bits of entropy** (about 3.5 × 10¹³ possibilities), generated with WebCrypto and easy to read aloud. Older 3-word
+  codes (37 bits) are still accepted so existing households keep working, but are no longer generated. Only an HMAC-SHA256 of the
+  code, keyed with the `SYNC_PEPPER` secret, is stored.
 - `POST /api/sync` with `Authorization: Bearer <code>` and `{ since, changes }` merges the pushed records and returns
   `{ rev, changes, more, accepted, rejected, reset }`.
   - **Merge:** per record, last-writer-wins on `updatedAt`. Ties: id, then canonical JSON compared as UTF-8 bytes (the same order SQLite uses), so it is deterministic.
@@ -59,8 +61,12 @@ interleave.
 
 Authentication and the rate limits run before the request body is read. Codes and tokens are never logged. Errors are JSON `{ error, message }`; the `message` says what to do. Device clocks
 matter: `updatedAt` more than a day in the future is rejected, so a wrong clock can't win forever. Small drift just
-means the later-clocked edit wins. The ~37-bit code relies on the rate limits above for protection; set the optional
-`SYNC_PEPPER` secret (see DEPLOY.md) so a leaked database could not be brute-forced offline either. Cloudflare's own
+means the later-clocked edit wins. The code is the only thing protecting a household, and this code is public, so protection rests on its entropy (45.3 bits), the
+rate limits above, and the hashing: **`SYNC_PEPPER` is a required secret** (at least 32 characters, set with
+`npx wrangler secret put SYNC_PEPPER`, never committed; see DEPLOY.md). Without it the hash key would be public and a leaked
+database could be brute-forced offline, so the Worker refuses to run: `/api/household` and `/api/sync` answer the 503
+`sync_not_configured` with a message telling the owner what to do, and the app shows "Sync not set up". Changing the pepper later
+orphans existing households. Cloudflare's own
 rate-limiting rules (dashboard) can be added in front as defence in depth.
 
 A device syncs on start, after edits (1.5 s debounce, at most 15 s under continuous edits), when it comes back online,
@@ -77,12 +83,21 @@ and when the tab becomes visible. There is no background polling by default (`po
   `onChange`. Tombstones from the server contain only `{ id, type, updatedAt, deleted: true }`.
 - `onChange(cb) → unsubscribe` (optional): called after local writes. Without it, call `client.notifyChange()` yourself.
 
-Using it from the UI:
+**It is wired into the app.** `app/main.js` calls `startSync(store)` (`app/sync/boot.js`) after the store opens; that wraps the app
+store with `app/sync/store-adapter.js` (the store finds local changes by `updatedAt`, so the cursor is the newest `updatedAt` pushed;
+records merged in from the server are remembered so they are not pushed back). **Settings → Sync** (`app/sync/settings-section.js`)
+lets the user create or join a household, see the status, sync now, show/hide the code and leave. Without a household the app makes
+no sync request at all until Settings → Sync is opened (it then checks whether a server is set up). Known limitation: because the
+cursor is an `updatedAt`, an edit stamped older than the newest pushed one (a device clock set backwards) is not pushed until the
+next full re-push, which the server triggers with `reset`.
+
+Using the client directly:
 
 ```js
 import { createSyncClient } from './app/sync/client.js';
 const sync = createSyncClient({ store });   // endpoint defaults to /api
-sync.start();                                // resumes a saved household, or probes whether sync is available
+sync.start();                                // resumes a saved household; makes no request without one
+await sync.probe();                          // is a configured server there? sets "Sync not set up" if not
 sync.onStatus((s) => { el.textContent = s.label; });  // "Synced 2 min ago" | "Offline" | "Sync not set up" | "Sync off" | ...
 await sync.createHousehold();                // → { code }; show it to the user
 await sync.joinHousehold(typedCode);         // throws SyncError with a message to show
