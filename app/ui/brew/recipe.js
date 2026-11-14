@@ -75,7 +75,7 @@ export function renderRecipe(host, F) {
 
   const start = h('button', { class: 'btn primary big block', type: 'button', 'data-testid': 'start-brew', onclick: () => {
     unlockAudio();
-    if (!(F.recipe.dose > 0) || !(F.recipe.yield > 0)) return ctx.toast('Enter the coffee and the yield first.');
+    if (!(dose.input.valueAsNumber > 0) || !(yld.input.valueAsNumber > 0)) return ctx.toast('Enter the coffee and the yield first.');
     F.go('prep');
   } }, 'Start brewing', icon('chevron', { size: 22 }));
 

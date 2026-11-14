@@ -59,7 +59,6 @@ export function renderResult(host, F) {
   addEventListener('pagehide', save);
 
   // ---- numbers ----
-  const m = analysis.metrics;
   const fact = (label, value, unit) => h('div', { class: 'fact' }, h('dd', { class: 'num' }, value, unit ? h('small', {}, unit) : null), h('dt', {}, label));
   const facts = [
     fact('Coffee', fmtG(brew.dose, 1), 'g'),
@@ -69,7 +68,6 @@ export function renderResult(host, F) {
   ];
   if (brew.firstDropS != null) facts.push(fact('First drops', `${brew.firstDropS.toFixed(0)}`, 's'));
   if (brew.dripAfterStopG != null) facts.push(fact('Drip after stop', brew.dripAfterStopG.toFixed(1), 'g'));
-  void m;
 
   // ---- the insight: one takeaway, one thing to try ----
   const takeaway = h('p', { class: 'takeaway', 'data-testid': 'takeaway' });

@@ -61,7 +61,9 @@ export async function mount(root, ctx) {
       flow.dataset.stage = name; F.stage = name;
       setChildren(stage);
       delete stage.dataset.phase; delete stage.dataset.hit;
-      stageCleanup = SCREENS[name](stage, F);
+      const mine = ++renders;
+      const cleanup = SCREENS[name](stage, F);
+      if (mine === renders) stageCleanup = cleanup; else try { cleanup?.(); } catch (e) { console.error(e); } // a screen switched again while rendering
       scrollTo(0, 0);
     },
     /** Abandon the brew: nothing is saved. Back to the recipe. */
@@ -70,7 +72,7 @@ export async function mount(root, ctx) {
     done() { ctx.navigate('/home'); },
   };
 
-  let stageCleanup = null;
+  let stageCleanup = null, renders = 0;
   const closeStage = () => { try { stageCleanup?.(); } catch (e) { console.error(e); } stageCleanup = null; };
   const endRun = () => { F.run?.destroy(); F.run = null; };
 

@@ -79,8 +79,9 @@ export function startingRecipe({ method, profile, recipes = [], brews = [], reci
 export function editRecipe(recipe, field, value) {
   if (field === 'dose' || field === 'ratio' || field === 'yield') {
     const next = linkRecipe(recipe, field, value);
-    if (field === 'dose' && Array.isArray(recipe.steps) && recipe.dose > 0 && next.dose > 0) {
-      const f = next.dose / recipe.dose;
+    const was = field === 'dose' ? recipe.dose : recipe.yield, now = field === 'dose' ? next.dose : next.yield;
+    if (field !== 'ratio' && Array.isArray(recipe.steps) && was > 0 && now > 0) {
+      const f = now / was;
       next.steps = recipe.steps.map((s) => (Number.isFinite(s.targetG) ? { ...s, targetG: round(s.targetG * f, 1) } : { ...s }));
     }
     return next;
@@ -151,7 +152,7 @@ export async function saveProfileRecipe(store, { profile, recipe, beanId }) {
   const existing = (await store.list('recipe')).find((r) => r.profileId === profile.id && r.method === recipe.method && r.favorite);
   const rec = {
     ...(existing ?? {}), type: 'recipe', profileId: profile.id, method: recipe.method, favorite: true,
-    name: recipe.name || getMethod(recipe.method)?.name || recipe.method,
+    name: recipe.name && recipe.name !== getMethod(recipe.method)?.defaults.name ? recipe.name : getMethod(recipe.method)?.name ?? recipe.method, // default names embed the default amounts
     dose: recipe.dose, yield: recipe.yield, ratio: recipe.ratio ?? ratioOf(recipe.dose, recipe.yield),
   };
   for (const k of ['tempC', 'grind', 'steps', 'portafilter']) { if (recipe[k] != null) rec[k] = recipe[k]; else delete rec[k]; }

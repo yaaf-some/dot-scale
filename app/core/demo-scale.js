@@ -2,7 +2,7 @@
 // frames built by protocol.js, split into chunks to exercise the parser's reassembly.
 // Teach it here whenever you add a protocol feature (CLAUDE.md rule).
 //
-// Demo-only controls (not part of the real transport): setScenario(), place(g), remove(), lift(g), startFlow(), dispense(g, gps),
+// Demo-only controls (not part of the real transport): setScenario(), place(g), remove(), startFlow(), dispense(g, gps),
 // stopFlow(), coupleTimer(bool). The Brew screen's demo panel drives every method through these (app/ui/brew/demo-panel.js).
 import { OP, CMD, TIMER, frame } from '../../protocol.js';
 
@@ -84,8 +84,6 @@ export function createDemoTransport(onBytes, { tickMs = 100, scenario = 'pour-ov
     startFlow() { sim.pumping = true; sim.flowMs = 0; },
     /** Stop the scenario flow (pump off). */
     stopFlow() { sim.pumping = false; },
-    /** Take weight off the scale (a dripper lifted away, a cup removed) without touching the tare. */
-    lift(g) { sim.grams -= g; },
     /** Pour `g` grams at `gps` g/s, like a kettle. Independent of the timer and of the scenarios. */
     dispense(g, gps = 5) { if (g > 0) { sim.queueG += g; sim.queueGps = Math.max(0.1, gps); } },
     /** true (default): the scale timer starts/stops the scenario flow, as in the old demo. The Brew flow turns this off. */

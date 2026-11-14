@@ -3,14 +3,16 @@
 export function createWakeLock() {
   let lock = null;
   let wanted = false;
+  let pending = false;
 
   async function acquire() {
-    if (!wanted || lock || !navigator.wakeLock?.request || document.visibilityState !== 'visible') return;
+    if (!wanted || lock || pending || !navigator.wakeLock?.request || document.visibilityState !== 'visible') return;
+    pending = true;
     try {
       lock = await navigator.wakeLock.request('screen');
       lock.addEventListener('release', () => { lock = null; });
       if (!wanted) release();
-    } catch { lock = null; } // refused (battery saver, permissions): fine
+    } catch { lock = null; } finally { pending = false; } // refused (battery saver, permissions): fine
   }
   function release() {
     const l = lock; lock = null;

@@ -207,15 +207,6 @@ input:user-invalid { border-color: var(--danger); }
 .onboard h1 { font-size: var(--step-3); }
 .onboard-actions { display: flex; gap: var(--s3); align-items: center; justify-content: space-between; margin-top: var(--s3); }
 
-/* ---------- Live readout (placeholder until the brew flow lands) ---------- */
-.readout { display: grid; gap: var(--s3); justify-items: center; text-align: center; padding: var(--s5) 0; }
-.readout .weight { font-family: var(--font-display); font-size: var(--step-hero); line-height: 1; font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.02em; }
-.readout .weight small { font-family: var(--font-ui); font-size: 0.25em; color: var(--ink-soft); margin-left: 0.15em; letter-spacing: 0; }
-.readout .weight.over { color: var(--danger); }
-.readout-stats { display: flex; gap: var(--s6); color: var(--ink-soft); }
-.readout-stats b { display: block; font-family: var(--font-display); font-size: var(--step-3); color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
-.live-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
-
 /* ---------- Dialog sheet ---------- */
 dialog.sheet {
   border: 0; padding: 0; background: var(--raised); color: var(--ink); border-radius: var(--r-panel);

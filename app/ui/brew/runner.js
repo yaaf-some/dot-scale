@@ -30,9 +30,11 @@ export function createRunner({ scale, prefs, method, recipe, history = [], profi
   let startedAt = null;
   let last = session.state;
   let closed = false;
-  let pumpTimer = null;
-  const wasCoupled = scale.demo?.sim.coupled;
-  scale.demo?.coupleTimer(false); // in Demo the flow comes from the demo panel, not from the scale's timer
+  let pumpTimer = null, pumpArmed = false;
+  // In Demo the flow comes from the demo panel, not from the scale's timer. The demo may be started after this runner exists.
+  let decoupled = null;
+  const decouple = () => { const d = scale.demo; if (d && d !== decoupled?.d) { decoupled = { d, was: d.sim.coupled }; d.coupleTimer(false); } };
+  decouple();
 
   function applyCommands(commands) {
     for (const c of commands) {
@@ -60,7 +62,7 @@ export function createRunner({ scale, prefs, method, recipe, history = [], profi
     if (scale.state.status !== 'connected') return; // the shell sends a zero reading on disconnect; it is not a measurement
     apply(session.feed({ t: at / 1000, grams, flow }));
   });
-  const offStatus = scale.on('status', () => bus.emit('connection', { connected: scale.state.status === 'connected', status: scale.state.status, text: scale.state.text }));
+  const offStatus = scale.on('status', () => { decouple(); bus.emit('connection', { connected: scale.state.status === 'connected', status: scale.state.status, text: scale.state.text }); });
 
   return {
     session,
@@ -70,22 +72,20 @@ export function createRunner({ scale, prefs, method, recipe, history = [], profi
     get startedAt() { return startedAt; },
     get connected() { return scale.state.status === 'connected'; },
     dispatch(e) {
+      const first = e.type === 'pumpOff' && !pumpArmed;
       const out = apply(session.dispatch(e));
-      if (e.type === 'tare' || e.type === 'begin') return out;
-      if (e.type === 'pumpOff') { // the drip after the pump stops is part of the curve: give it a few seconds, then finish
+      if (first) { pumpArmed = true; // the drip after the pump stops is part of the curve: give it a few seconds, then finish
         clearTimeout(pumpTimer);
         pumpTimer = setTimeout(() => { if (!closed && session.state.phase === 'running') apply(session.dispatch({ type: 'finish' })); }, 3500);
       }
       return out;
     },
-    /** Apply changed settings (auto-tare / auto-start / auto-stop) to the live session. */
-    settings(s) { Object.assign(settings, s); apply(session.dispatch({ type: 'settings', settings: s })); },
     destroy() {
       if (closed) return;
       const running = last.phase === 'running';
       closed = true; clearTimeout(pumpTimer); offWeight(); offStatus();
       if (running) scale.timer.reset();
-      if (wasCoupled !== undefined) scale.demo?.coupleTimer(wasCoupled);
+      if (decoupled) decoupled.d.coupleTimer(decoupled.was);
     },
   };
 }

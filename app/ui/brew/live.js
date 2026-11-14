@@ -47,7 +47,7 @@ export function renderLive(host, F) {
   const finish = h('button', { class: 'btn big', type: 'button', 'data-testid': 'live-finish', onclick: () => run.dispatch({ type: 'finish' }) }, 'Done');
   const cancel = h('button', { class: 'btn quiet', type: 'button', 'data-testid': 'live-cancel', onclick: async () => {
     if (run.state.phase === 'running' && !(await confirmDialog({ title: 'Cancel this brew?', message: 'Nothing will be saved.', confirmLabel: 'Cancel brew', danger: true }))) return;
-    F.cancel();
+    if (F.stage === 'live' && run.state.phase !== 'done') F.cancel(); // the shot may have finished while the dialog was open
   } }, 'Cancel');
   const demo = demoPanel(F);
 
