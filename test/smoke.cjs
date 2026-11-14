@@ -46,11 +46,94 @@ const pw = require('playwright');
     check((await page.locator('.home-title').innerText()).includes('Alexa'), 'Home greets the chosen profile');
     check(await page.locator('.scale-line[data-status="connected"]').count() === 1, 'demo scale shows as connected on Home');
 
+    // ---- Brew: method picker -> recipe -> prep -> live -> result -> saved Brew (espresso, through Demo mode) ----
+    const brewsOf = (method) => page.evaluate((m) => window.dotScale.store.list('brew').then((l) => l.filter((b) => b.method === m)), method);
+    const demo = (id) => page.click(`[data-demo="${id}"]`);
     await page.click('a.tab:has-text("Brew")');
-    await page.waitForSelector('[data-testid="weight"]');
-    await page.click('button:has-text("Start")');
-    await page.waitForFunction(() => parseFloat(document.querySelector('[data-testid="weight"]').textContent) > 1, null, { timeout: 8000 });
-    check(true, 'weight rises during the simulated pour');
+    await page.waitForSelector('.method-tile');
+    check((await page.locator('.method-tile').first().getAttribute('data-method')) === 'espresso', 'method picker lists the profile’s espresso first');
+    await page.click('.method-tile[data-method="espresso"]');
+    await page.waitForSelector('[data-testid="start-brew"]');
+    check((await page.inputValue('#r-dose')) === '16' && (await page.inputValue('#r-yield')) === '32', 'recipe is prefilled with the espresso defaults (16 → 32 g)');
+    await page.fill('#r-dose', '18');
+    check((await page.inputValue('#r-yield')) === '36', 'changing the dose keeps the ratio and moves the yield');
+    await page.fill('#r-dose', '16');
+    check((await page.inputValue('#r-yield')) === '32', 'dose back to 16 g gives 32 g again');
+    await page.click('[data-testid="start-brew"]');
+    await page.waitForSelector('[data-testid="prep-weight"]');
+    await demo('dose');
+    await page.waitForFunction(() => { const b = document.querySelector('[data-testid="use-dose"]'); return b && !b.disabled; }, null, { timeout: 8000 });
+    await page.click('[data-testid="use-dose"]');
+    await demo('cup'); // portafilter off, cup on: the session tares by itself
+    await page.waitForSelector('[data-testid="live-weight"]', { timeout: 10000 });
+    check(await page.locator('.phases li').count() === 4, 'live screen shows the four espresso phases');
+    await demo('pump');
+    await page.waitForSelector('.brew-stage[data-phase="running"]', { timeout: 15000 });
+    check(true, 'espresso timer auto-starts at the first drops');
+    await page.waitForSelector('[data-testid="save-brew"]', { timeout: 70000 });
+    check((await page.locator('[data-testid="takeaway"]').innerText()).length > 5, 'result shows a takeaway');
+    check(await page.locator('[data-testid="try-next"]').count() === 1 && await page.locator('canvas.chart').count() === 1, 'result shows one thing to try and the curve');
+    await page.click('.scale5[aria-label="Your rating"] button[data-v="4"]');
+    await page.click('[data-testid="save-brew"]');
+    await page.waitForSelector('.home-title');
+    const espressoBrews = await brewsOf('espresso');
+    const eb = espressoBrews[0];
+    check(espressoBrews.length === 1 && eb.startSource === 'auto' && eb.samples.hz === 10 && eb.samples.channels.weight.length > 100 && eb.taste?.stars === 4 && eb.yield > 20 && eb.metrics && eb.insights?.verdict,
+      `espresso Brew is saved with samples, metrics, insights and taste (${eb ? `${eb.yield} g in ${eb.timeS} s, ${eb.samples.channels.weight.length} samples` : 'none'})`);
+
+    // Brew again: the Home ticket opens the recipe filled in
+    await page.click('.ticket:has-text("Espresso")');
+    await page.waitForSelector('[data-testid="start-brew"]');
+    check(Math.abs(parseFloat(await page.inputValue('#r-dose')) - 16) < 0.5 && (await page.inputValue('#r-yield')) === '32', 'a Brew again ticket opens the recipe filled in');
+
+    // every other method end to end through Demo mode
+    const before = {};
+    const finishAndSave = async (method) => {
+      await page.waitForSelector('.brew-stage[data-phase="running"]', { timeout: 20000 });
+      await page.waitForFunction(() => parseFloat(document.querySelector('[data-testid="live-weight"]').textContent) > 1, null, { timeout: 5000 });
+      await page.click('[data-testid="live-finish"]');
+      await page.waitForSelector('[data-testid="save-brew"]', { timeout: 10000 });
+      await page.click('[data-testid="save-brew"]');
+      await page.waitForSelector('.home-title');
+      check((await brewsOf(method)).length === (before[method] ?? 0) + 1, `${method}: a Brew was saved`);
+    };
+    const begin = async (method) => {
+      before[method] = (await brewsOf(method)).length; // the migrated legacy brew is already a pour-over
+      await page.goto(page.url().split('#')[0] + `#/brew/${method}`);
+      await page.waitForSelector('[data-testid="start-brew"]');
+      await page.click('[data-testid="start-brew"]');
+      await demo('dose');
+      await page.waitForFunction(() => { const b = document.querySelector('[data-testid="use-dose"]'); return b && !b.disabled; }, null, { timeout: 8000 });
+      await page.click('[data-testid="use-dose"]');
+    };
+    // pour-over: dose, auto-tare, pour the bloom (the timer starts by itself), finish
+    await begin('pour-over');
+    await page.waitForSelector('[data-testid="live-weight"]', { timeout: 10000 });
+    await demo('pour');
+    await finishAndSave('pour-over');
+    // French press, AeroPress, Prestina: pour all the water, finish
+    for (const id of ['french-press', 'aeropress', 'prestina']) {
+      await begin(id);
+      await page.waitForSelector('[data-testid="live-weight"]', { timeout: 10000 });
+      await demo('pour');
+      await finishAndSave(id);
+    }
+    // moka: dose, base on (tare), water, then the timer is started by hand
+    await begin('moka');
+    await demo('cup');
+    await page.waitForSelector('[data-demo="water"]', { timeout: 10000 });
+    await demo('water');
+    await page.waitForFunction(() => { const b = document.querySelector('[data-testid="use-dose"]'); return b && !b.disabled; }, null, { timeout: 8000 });
+    await page.click('[data-testid="use-dose"]');
+    await page.waitForSelector('[data-testid="live-primary"]', { timeout: 10000 });
+    await page.click('[data-testid="live-primary"]');
+    await page.waitForSelector('.brew-stage[data-phase="running"]', { timeout: 5000 });
+    await page.click('[data-testid="live-finish"]');
+    await page.waitForSelector('[data-testid="save-brew"]');
+    await page.click('a.tab:has-text("Home")'); // walk away without tapping Save
+    await page.waitForSelector('.home-title');
+    await page.waitForFunction(async (n) => (await window.dotScale.store.list('brew')).filter((b) => b.method === 'moka').length === n, before.moka + 1, { timeout: 5000 });
+    check(true, 'moka: walking away from the result screen still saves the Brew');
 
     await page.click('a.tab:has-text("Journal")');
     await page.waitForSelector('[data-view="journal"] h2');

@@ -47,7 +47,7 @@ export async function mount(root, ctx) { /* fill `root`; optionally return a cle
   spacing and radii from `tokens.css` variables only.
 - Extension points that need no shell edits: `registerSettingsSection()` (settings-sections.js), `registerNudge()` (nudges.js, one
   nudge on Home). Import your module from `app/modules.js`. A new *tab* is the only thing that edits `TABS` in `main.js`.
-- Stubs to replace: `brew.js`, `journal.js`, `learn.js` (keep `meta`, and the empty state until real content exists).
+- Stubs to replace: `journal.js`, `learn.js` (keep `meta`, and the empty state until real content exists). `brew.js` is the real flow now (screens in `app/ui/brew/`, glue in `app/core/brew-record.js`).
 - Seed records use fixed ids and `updatedAt: 1` (see `seeds.js`); don't re-seed with random ids.
 
 ## Commands

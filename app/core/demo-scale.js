@@ -2,7 +2,8 @@
 // frames built by protocol.js, split into chunks to exercise the parser's reassembly.
 // Teach it here whenever you add a protocol feature (CLAUDE.md rule).
 //
-// Demo-only controls (not part of the real transport): setScenario(), place(g), remove(), startFlow().
+// Demo-only controls (not part of the real transport): setScenario(), place(g), remove(), lift(g), startFlow(), dispense(g, gps),
+// stopFlow(), coupleTimer(bool). The Brew screen's demo panel drives every method through these (app/ui/brew/demo-panel.js).
 import { OP, CMD, TIMER, frame } from '../../protocol.js';
 
 const enc = (s) => [...new TextEncoder().encode(s)];
@@ -13,10 +14,12 @@ export const SCENARIOS = {
   'pour-over': (t) => (t < 5 ? 6 : t < 35 ? 0.3 : t < 60 ? 4.5 : t < 75 ? 0.5 : t < 110 ? 3.8 : 0),
   // EC260 on a 16 g dose: ~7 s to first drops, ~1.2 g/s main flow, tail-off after ~27 s
   espresso: (t) => (t < 7 ? 0 : t < 9 ? 0.5 : t < 27 ? 1.25 : t < 30 ? 0.4 : 0.05),
+  // A 1:2 shot that lands on 32 g: ~7 s to first drops, ~1.7 g/s, pump off at ~27 s, a short drip, then quiet.
+  'espresso-1to2': (t) => (t < 7 ? 0 : t < 9 ? 0.5 : t < 27 ? 1.7 : t < 28.5 ? 0.35 : t < 30 ? 0.05 : 0),
 };
 
 export function createDemoTransport(onBytes, { tickMs = 100, scenario = 'pour-over' } = {}) {
-  const sim = { grams: 0, tareOffset: 0, timer: 0, running: false, pumping: false, ms: 0, flowMs: 0, scenario, prev: 0 };
+  const sim = { grams: 0, tareOffset: 0, timer: 0, running: false, pumping: false, ms: 0, flowMs: 0, scenario, prev: 0, queueG: 0, queueGps: 0, coupled: true };
   const timeouts = new Set();
   const later = (fn, ms) => { const id = setTimeout(() => { timeouts.delete(id); fn(); }, ms); timeouts.add(id); };
 
@@ -32,6 +35,11 @@ export function createDemoTransport(onBytes, { tickMs = 100, scenario = 'pour-ov
       sim.flowMs += tickMs;
       const flow = (SCENARIOS[sim.scenario] ?? SCENARIOS['pour-over'])(sim.flowMs / 1000);
       sim.grams += (flow * tickMs) / 1000 + (Math.random() - 0.5) * 0.04;
+    }
+    if (sim.queueG > 0) { // a measured pour (dispense), independent of the timer
+      const g = Math.min(sim.queueG, (sim.queueGps * tickMs) / 1000);
+      sim.queueG -= g;
+      sim.grams += g + (Math.random() - 0.5) * 0.04;
     }
     const net = sim.grams - sim.tareOffset;
     const flow = ((net - sim.prev) * 1000) / tickMs;
@@ -51,9 +59,9 @@ export function createDemoTransport(onBytes, { tickMs = 100, scenario = 'pour-ov
       if (op === OP.WRITE) {
         if (cmd === CMD.TARE) sim.tareOffset = sim.grams;
         if (cmd === CMD.TIMER) {
-          if (p[0] === TIMER.START) { sim.running = true; sim.pumping = true; }
-          if (p[0] === TIMER.PAUSE) { sim.running = false; sim.pumping = false; }
-          if (p[0] === TIMER.RESET) { sim.running = false; sim.pumping = false; sim.timer = 0; sim.ms = 0; sim.flowMs = 0; }
+          if (p[0] === TIMER.START) { sim.running = true; if (sim.coupled) sim.pumping = true; }
+          if (p[0] === TIMER.PAUSE) { sim.running = false; if (sim.coupled) sim.pumping = false; }
+          if (p[0] === TIMER.RESET) { sim.running = false; if (sim.coupled) sim.pumping = false; sim.timer = 0; sim.ms = 0; if (sim.coupled) sim.flowMs = 0; }
           later(() => emit(OP.NOTIFY, CMD.TIMER, [p[0]]), 50);
         }
         later(() => emit(OP.WRITE, cmd, [1]), 30);
@@ -71,9 +79,17 @@ export function createDemoTransport(onBytes, { tickMs = 100, scenario = 'pour-ov
     setScenario(name) { if (SCENARIOS[name]) sim.scenario = name; },
     /** Put something on the scale (beans, portafilter, cup): a sudden weight step, no flow. */
     place(g) { sim.grams += g; },
-    remove() { sim.grams = sim.tareOffset; },
+    remove() { sim.grams = sim.tareOffset; sim.queueG = 0; sim.pumping = false; }, // also ends any pour in progress
     /** Start the flow without the scale timer, like pressing the pump: lets auto-start logic be tested. */
-    startFlow() { sim.pumping = true; },
+    startFlow() { sim.pumping = true; sim.flowMs = 0; },
+    /** Stop the scenario flow (pump off). */
+    stopFlow() { sim.pumping = false; },
+    /** Take weight off the scale (a dripper lifted away, a cup removed) without touching the tare. */
+    lift(g) { sim.grams -= g; },
+    /** Pour `g` grams at `gps` g/s, like a kettle. Independent of the timer and of the scenarios. */
+    dispense(g, gps = 5) { if (g > 0) { sim.queueG += g; sim.queueGps = Math.max(0.1, gps); } },
+    /** true (default): the scale timer starts/stops the scenario flow, as in the old demo. The Brew flow turns this off. */
+    coupleTimer(on) { sim.coupled = !!on; },
     get sim() { return sim; },
   };
 }
