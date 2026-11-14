@@ -1,4 +1,4 @@
-// Cross-platform static server for local dev (same job as serve.ps1).
+// Static server for local development.
 // Usage: node scripts/serve.mjs [port]   — Web Bluetooth needs localhost or HTTPS.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

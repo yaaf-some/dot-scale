@@ -1,56 +1,67 @@
 # Dot Scale
 
-A self-hosted web app for the **Timemore Dot (TES017)** Bluetooth coffee scale, so you don't need the Timemore app.
-The scale's firmware is left as it is. The app talks to it directly over Web Bluetooth using
-[Timemore's published protocol](https://github.com/TIMEMORE-COFFEE/open-scale-protocol).
+A home-barista coach for the **Timemore Dot (TES017)** Bluetooth coffee scale. It reads weight and flow straight from the scale,
+runs the brew hands-off, and after each drink tells you one thing to try next. The scale's firmware is left as it is: the app talks
+to it directly over Web Bluetooth using [Timemore's published protocol](https://github.com/TIMEMORE-COFFEE/open-scale-protocol).
 
 > Unofficial hobby project. It is not made by or affiliated with Timemore; "Timemore" and "Dot" belong to their owners.
 
-## Hosting
+## Use it
 
-The app is plain static files with no build step. It's hosted on **Vercel** at **https://dot-scale.vercel.app**, which redeploys on every push to `main`.
-Open the Vercel URL in Chrome (Android, desktop) or **Bluefy** (iPhone; Safari has no Web Bluetooth).
+Open **https://coffee.yaafsome.fyi** in Chrome (Android, desktop) or **Bluefy** (iPhone, iPad; Safari has no Web Bluetooth),
+then connect your scale. Add it to your home screen to install it; it works offline once it has loaded. Press **Demo** to try it
+without a scale.
+
 Bluetooth runs between the scale and whatever device has the page open, so no computer needs to stay on.
-
-## Run it locally
-
-```bash
-npm run serve
-```
-
-Needs Node 18+.
-
-Then open http://localhost:8737 in **Chrome or Edge** and click **Connect scale**. You can install it as an app
-from the address bar.
-
-Web Bluetooth only works on `localhost` or `https://`.
-
-### Optional: tailnet-only hosting
-
-On any always-on machine running `npm run serve` (or any static server on port 8737),
-`tailscale serve --bg 8737` publishes it over HTTPS at `https://<machine>.<tailnet>.ts.net/`, visible only on your tailnet.
 
 ## What it does
 
-- Live weight (0.1 g), flow rate, the scale's own timer, and battery level
-- Tare, plus timer start, pause and reset (on the scale itself)
-- Brew recipe with dose, ratio and target, a progress bar, and a beep at the target
-- The timer can start automatically when you start pouring
-- Pour graph of weight and flow
-- Brew history, stored in this browser only
-- Scale settings: rename, power off, forget old app pairing, factory reset
-- Debug log with raw frames, and a raw command sender
-- **Demo mode**: a simulated scale that speaks the same protocol, so you can try the app without hardware
+- **Brew:** espresso, pour-over, French press, AeroPress, moka pot and Wacaco Prestina. Pick a method, check the recipe, and the app
+  tares, starts the timer when coffee starts flowing, cues the pours and the moment to stop the pump, beeps at the target, and keeps
+  the screen awake. The live screen is readable from a metre away.
+- **Learn from every drink:** the result screen gives one takeaway and one thing to try next, plus a quick taste check. The advice
+  is tuned for a 16 g double on a non-pressurized basket and changes one variable at a time.
+- **Journal:** your brews by day, with weight and flow curves, comparing two brews, a dial-in trail for each bean, and JSON/CSV
+  backup and import.
+- **Learn:** short cards that explain what the numbers mean, linked from the tips.
+- **Profiles:** Yaaf and Alexa to start, more can be added, each with their own recipes and history.
+- **Household sync (optional):** share profiles, beans and brews between your devices with a household code. The app works fully
+  without it.
+- **Scale settings:** rename, power off, forget an old app pairing and factory reset, plus a debug log and raw command sender.
+- **Demo mode:** a simulated scale that speaks the same protocol.
+
+## Hosting
+
+The app is plain static files with no build step, plus one small Worker for the optional sync API. It runs on **Cloudflare**
+(Workers with static assets) and deploys on every push to `main`. Setup, previews, sync and security headers: `docs/DEPLOY.md`.
+
+## Develop
+
+```bash
+npm run serve      # local server on http://localhost:8737 (Web Bluetooth needs localhost or https)
+npm test           # unit tests (Node 22.13+; the sync tests use the built-in node:sqlite)
+npm run smoke      # browser test through Demo mode (Playwright)
+npm run check      # both; run before every push
+```
+
+Open http://localhost:8737 in Chrome or Edge. No dependencies and no build step.
+
+Where to read next: `CLAUDE.md` (code layout and rules), `docs/PRODUCT.md` (what the app is and the data model),
+`docs/DESIGN.md` (the visual direction), `docs/SYNC.md` (household sync), `docs/DEPLOY.md` (hosting).
 
 ## Files
 
-| File | What it is |
+| Path | What it is |
 |---|---|
 | `protocol.js` | Frame builder, CRC-16/MODBUS, streaming parser. Command bytes match frames verified on real hardware. |
 | `index.html` | Thin app shell |
-| `app/` | The app: `core/` (store, scale, demo), `ui/` (tokens, components, views). See `CLAUDE.md` |
-| `scripts/serve.mjs` | Local dev server (`npm run serve`) |
-| `test/` | Protocol unit tests (`npm test`) and a Demo-mode browser smoke test (`npm run smoke`) |
+| `app/` | The app: `core/` (store, scale, demo, brew session), `methods/`, `insights/`, `learn/`, `journal/`, `sync/`, `ui/` (tokens, components, views) |
+| `sw.js`, `icons/`, `manifest.webmanifest` | Offline support and install |
+| `worker/`, `migrations/` | The sync API (a Cloudflare Worker) and its D1 schema |
+| `wrangler.jsonc`, `_headers`, `.assetsignore` | Cloudflare config, security headers, and what is never served |
+| `scripts/` | Local dev server and asset scripts |
+| `test/` | Unit tests and the Demo-mode browser test |
+| `docs/` | Product, design, sync and deploy documents |
 
 ## Protocol notes
 

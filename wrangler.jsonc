@@ -31,7 +31,7 @@
   // An empty block is enough; production deploys (`wrangler deploy` on main) ignore it.
   "previews": {}
 
-  // Custom domain: add coffee.yaafsome.fyi in the dashboard AFTER removing the old Vercel CNAME (docs/DEPLOY.md, step 4).
-  // To pin it in this file instead, add (only once that DNS record is gone, or the deploy fails):
+  // Custom domain: coffee.yaafsome.fyi is attached in the dashboard (docs/DEPLOY.md, step 1).
+  // To pin it in this file instead, add (only while no other DNS record uses that name, or the deploy fails):
   //   "routes": [{ "pattern": "coffee.yaafsome.fyi", "custom_domain": true }]
 }

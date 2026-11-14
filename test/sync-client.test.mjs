@@ -1,4 +1,4 @@
-// Sync client against fake fetch / fake Upstash / fake store / fake timers. No network, no real Redis.
+// Sync client against a fake fetch backed by the real worker handlers and storage on in-memory SQLite, a fake store and fake timers. No network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeServer, routeFetch } from './helpers/world.mjs';
