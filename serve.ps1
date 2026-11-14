@@ -1,6 +1,6 @@
 # Serves the Dot Scale app at http://localhost:8737 (Web Bluetooth needs localhost or HTTPS).
 # Listens on 127.0.0.1 only. To reach it from your phone, put `tailscale serve` in front (see README).
-# Usage: powershell -ExecutionPolicy Bypass -File scale\serve.ps1 [-Port 8737] [-Open]
+# Usage: powershell -ExecutionPolicy Bypass -File serve.ps1 [-Port 8737] [-Open]
 param([int]$Port = 8737, [switch]$Open)
 
 $root = (Resolve-Path $PSScriptRoot).Path

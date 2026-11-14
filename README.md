@@ -13,8 +13,10 @@ Bluetooth runs between the scale and whatever device has the page open, so no co
 ## Run it locally
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scale\serve.ps1 -Open
+powershell -ExecutionPolicy Bypass -File serve.ps1 -Open
 ```
+
+Or, with Node 18+ on any OS: `npm run serve`.
 
 Then open http://localhost:8737 in **Chrome or Edge** and click **Connect scale**. You can install it as an app
 from the address bar.
@@ -44,7 +46,9 @@ On any always-on machine running `serve.ps1` (or any static server on port 8737)
 |---|---|
 | `protocol.js` | Frame builder, CRC-16/MODBUS, streaming parser. Command bytes match frames verified on real hardware. |
 | `index.html` | The app UI |
-| `serve.ps1` | Small local web server (no dependencies) |
+| `serve.ps1` | Small local web server for Windows (no dependencies) |
+| `scripts/serve.mjs` | The same server in Node (`npm run serve`) |
+| `test/` | Protocol unit tests (`npm test`) and a Demo-mode browser smoke test (`npm run smoke`) |
 
 ## Protocol notes
 
