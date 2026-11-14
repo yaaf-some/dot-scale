@@ -140,7 +140,7 @@ The live site stays on Vercel until the owner cuts over; nothing here may break 
   `{ rev, changes, more, accepted, rejected, reset }`. Merge per record by last-writer-wins on `updatedAt` (ties by id); deletes are
   tombstones (the server keeps only the envelope). The response is paged (`more` → call again with `since = rev`), `rejected` lists
   records refused with a reason, and `reset` means the server lost its data so the client re-pushes everything. Limits: 1 MB per
-  request, 20 records per request, 256 KB per record, 20k records per household, rate limit by household hash. Details, the
+  request, 15 records per request, 256 KB per record, 20k records per household, rate limit by household hash. Details, the
   storage adapter and the store contract (`changesSince`/`applyRemote`) are in `docs/SYNC.md`.
 - **Security:** `_headers` with HSTS, nosniff, referrer policy, a CSP as tight as the shell allows (`'unsafe-inline'` is acceptable
   temporarily until the new shell removes inline scripts/styles; tighten afterwards) and a Permissions-Policy that keeps Bluetooth for

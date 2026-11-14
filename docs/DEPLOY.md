@@ -113,7 +113,7 @@ Sync is optional and separate from hosting: until you do this, the app shows "Sy
    npx wrangler d1 create dot-scale
    ```
    Put the printed `database_id` into `wrangler.jsonc` (replacing `REPLACE_WITH_D1_DATABASE_ID`) and commit it to `main`
-   (the id is not a secret). **Do this before merging the sync PR, or its first deploy fails.**
+   (a D1 database id is a resource id, not an account id or a secret; the Cloudflare account id and API tokens never go into the repo). **Do this before merging the sync PR, or its first deploy fails.**
 2. Create the tables: `npx wrangler d1 migrations apply dot-scale --remote`. No terminal? Dashboard →
    **Storage & databases → D1 → dot-scale → Console**, paste `migrations/0001_init.sql`, run. Repeat for any later
    `migrations/000N_*.sql` (deploys do not run migrations).
@@ -162,7 +162,7 @@ Tested here (no Cloudflare account was available to me):
 
 **Not tested:** a real deploy; **remote D1** (latency, quotas, error behaviour, and `db.batch()` atomicity exactly as documented,
 which the merge relies on); `CF-Connecting-IP` being present in production (rate limits share one bucket without it); the
-Workers Free plan's 50-queries-per-request assumption behind the 20-records-per-push cap; Workers Builds (the GitHub connection, build/deploy commands, how it handles preview
+Workers Free plan's 50-queries-per-request assumption behind the 15-records-per-push cap (worst case measured on SQLite: 38 statements); Workers Builds (the GitHub connection, build/deploy commands, how it handles preview
 branches); attaching the custom domain and the certificate; the DNS cutover itself and its exact error messages; HSTS and
 headers on the real edge (only `wrangler dev` was used); and iPhone/iPad in Bluefy (WebKit) on the new address (only
 Chromium was run). Treat the first deploy as the real test and use steps 3-4 (workers.dev first, Vercel still live) for that.

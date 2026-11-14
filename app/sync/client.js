@@ -9,7 +9,9 @@
 //       merge server records using last-writer-wins on updatedAt (ties: id); idempotent.
 //   store.onChange(cb) -> unsubscribe   (optional; fire on local writes. Otherwise call client.notifyChange())
 
-export const MAX_RECORD_BYTES = 256 * 1024; // mirrors api/_lib/handlers.js LIMITS.maxRecordBytes
+import { normalizeCode, isValidCodeFormat } from './code.js';
+
+export const MAX_RECORD_BYTES = 256 * 1024; // mirrors worker/handlers.js LIMITS.maxRecordBytes
 
 export class SyncError extends Error {
   constructor(code, message, extra = {}) { super(message); this.name = 'SyncError'; this.code = code; Object.assign(this, extra); }
@@ -17,17 +19,13 @@ export class SyncError extends Error {
 
 export const utf8Length = (s) => new TextEncoder().encode(s).length;
 
-export function normalizeCode(input) {
-  return String(input ?? '').trim().toLowerCase().replace(/[\s_]+/g, '-');
-}
-const CODE_RE = /^[a-z0-9]+(?:-[a-z0-9]+){2,5}$/;
-export const isValidCodeFormat = (c) => typeof c === 'string' && c.length <= 64 && CODE_RE.test(c);
+export { normalizeCode, isValidCodeFormat };
 
 /**
  * Split records into request-sized chunks so a push never nears the server's 1 MB limit
  * (brew records carry sample arrays). Records over `maxRecordBytes` can't be synced: returned in `oversize`.
  */
-export function chunkRecords(records, { maxBytes = 256 * 1024, maxRecords = 20, maxRecordBytes = MAX_RECORD_BYTES } = {}) {
+export function chunkRecords(records, { maxBytes = 256 * 1024, maxRecords = 15, maxRecordBytes = MAX_RECORD_BYTES } = {}) {
   const chunks = [], oversize = [];
   let cur = [], bytes = 0;
   for (const r of records) {
@@ -89,11 +87,11 @@ export function createSyncClient({
   debounceMs = 1500,
   maxWaitMs = 15000, // under constant edits, still sync at least this often
   chunkBytes = 256 * 1024,
-  chunkSize = 20, // the server accepts at most 20 records per request (LIMITS.maxChangesPerRequest)
+  chunkSize = 15, // the server accepts at most 15 records per request (LIMITS.maxChangesPerRequest)
   backoffBaseMs = 2000,
   backoffMaxMs = 5 * 60 * 1000,
   unavailableRetryMs = 10 * 60 * 1000,
-  pollMs = 0, // optional background poll (off by default: each poll costs a few Redis commands)
+  pollMs = 0, // optional background poll (off by default: each poll costs a few D1 queries)
 } = {}) {
   if (!store || typeof store.changesSince !== 'function' || typeof store.applyRemote !== 'function') {
     throw new TypeError('createSyncClient needs a store with changesSince() and applyRemote()');
@@ -210,6 +208,7 @@ export function createSyncClient({
     if (res.changes.length) {
       applying = true; // ignore store-change events caused by our own merge
       try { await store.applyRemote(res.changes); } finally { applying = false; }
+      if (g !== gen) throw new SyncError('aborted', 'Household changed during sync.'); // switched while merging: don't touch the new state
     }
     rememberRejected(changes, res.rejected);
     persisted.since = res.rev;
@@ -243,6 +242,7 @@ export function createSyncClient({
       if (sawReset && !restarted) { // server lost its data: send everything we have again
         restarted = true; persisted.pushCursor = 0; save(); continue;
       }
+      if (g !== gen) throw new SyncError('aborted', 'Household changed during sync.');
       persisted.pushCursor = local.cursor;
       save();
       return;
@@ -294,6 +294,7 @@ export function createSyncClient({
     }
     blockedUntil = now() + delay;
     setStatus({ ...patch, retryAt: blockedUntil });
+    clearTimer(); // a debounce armed earlier must not fire before the backoff / Retry-After is over
     schedule(delay, { force: true });
     return { ok: false, reason: err.code, error };
   }
@@ -346,7 +347,7 @@ export function createSyncClient({
   }
 
   /**
-   * Is a sync service there and configured? Sends no code, so the server answers before touching Redis.
+   * Is a sync service there and configured? Sends no code, so the server answers before touching the database.
    * Sets the "Sync not set up" status when it isn't; never throws. Resolves to true if sync can be used.
    */
   async function probe() {

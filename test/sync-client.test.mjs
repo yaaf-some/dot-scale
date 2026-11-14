@@ -474,3 +474,55 @@ test('status listeners get updates; the household code never appears in a status
   assert.ok(!JSON.stringify(seen).includes(code));
   assert.ok(!logs.join('\n').includes(code));
 });
+
+test('joining another household while a pull is being merged does not corrupt the new household state', async () => {
+  const w = world();
+  const seed1 = w.device(), seed2 = w.device();
+  for (let i = 0; i < 12; i++) seed1.store.put(rec(`brew-${String(i).padStart(4, '0')}`, 100 + i)); // household 1: high rev
+  seed2.store.put(rec('brew-9999', 500));                                                         // household 2: tiny
+  const code1 = (await seed1.client.createHousehold()).code, code2 = (await seed2.client.createHousehold()).code;
+  const rev2 = w.d1.sql('SELECT rev FROM households ORDER BY created_at DESC, rev ASC LIMIT 1')[0].rev;
+
+  const store = makeStore();
+  let entered, release; const inMerge = new Promise((r) => { entered = r; }); const gate = new Promise((r) => { release = r; });
+  const realApply = store.applyRemote.bind(store);
+  store.applyRemote = async (list) => { entered(); await gate; return realApply(list); }; // hang inside the merge
+  const D = w.device({ store });
+  D.client.start();
+  const joining1 = D.client.joinHousehold(code1);
+  await inMerge;                                   // household 1's records are being merged right now
+  const joining2 = D.client.joinHousehold(code2);  // the user switches household meanwhile
+  await settle();
+  release();
+  await Promise.all([joining1, joining2]);
+  w.net.requests.length = 0;
+  await D.client.syncNow();
+  const saved = JSON.parse(D.storage.getItem('dot.sync'));
+  assert.equal(saved.code, code2);
+  assert.equal(JSON.parse(w.net.requests[0].body).since, 0, "household 2's first sync starts from 0, not household 1's rev");
+  assert.equal(saved.since, rev2, "state holds household 2's rev, not household 1's");
+  assert.equal(D.client.getStatus().state, 'synced');
+});
+
+test('a debounce armed while a sync is failing cannot bypass Retry-After', async () => {
+  const w = world({ limits: { syncPerMinute: 1 } });
+  let hold = null;
+  const D = w.device({ fetch: async (u, i) => { if (hold) await hold.promise; return w.fetch(u, i); } });
+  D.client.start();
+  await D.client.createHousehold();                      // uses the single request allowed this minute
+  let release; hold = { promise: new Promise((r) => { release = r; }) };
+  D.store.put(rec('brew-0001', 1));
+  const syncing = D.client.syncNow();                     // request in flight (will be refused with 429)
+  await settle();
+  D.store.put(rec('brew-0002', 2));                       // an edit arms a 1.5 s debounce meanwhile
+  hold = null; release();
+  await syncing;
+  assert.equal(D.client.getStatus().error?.code, 'rate_limited');
+  const before = w.net.requests.length;
+  await D.timers.advance(5000);
+  assert.equal(w.net.requests.length, before, 'no request before Retry-After has passed');
+  assert.ok(D.timers.pending()[0] > 0);
+  await D.timers.advance(61_000);
+  assert.ok(w.net.requests.length > before, 'retries after Retry-After');
+  assert.equal(D.client.getStatus().state, 'synced');
+});

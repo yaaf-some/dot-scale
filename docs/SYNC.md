@@ -17,6 +17,7 @@ off. The app shows "Sync not set up" and keeps working on each device.
 | **Storage adapter (the only file that knows the database)** | `worker/storage.js` |
 | Database schema | `migrations/0001_init.sql` |
 | Browser client (create/join, background sync, status) | `app/sync/client.js` |
+| Household code format, shared by the client and the Worker | `app/sync/code.js` |
 
 ### The storage adapter
 
@@ -33,7 +34,7 @@ interleave.
   (about 37 bits), generated with WebCrypto. Only an HMAC-SHA256 of the code is stored.
 - `POST /api/sync` with `Authorization: Bearer <code>` and `{ since, changes }` merges the pushed records and returns
   `{ rev, changes, more, accepted, rejected, reset }`.
-  - **Merge:** per record, last-writer-wins on `updatedAt`. Ties: id, then canonical JSON, so it is deterministic.
+  - **Merge:** per record, last-writer-wins on `updatedAt`. Ties: id, then canonical JSON compared as UTF-8 bytes (the same order SQLite uses), so it is deterministic.
     Deletes are tombstones (`deleted: true`); the server keeps only their envelope.
   - **rev** is a per-household counter. Every accepted change gets a new rev; `since` is "the last rev I have". Revs can
     have gaps (the server reserves a range per push); only the order matters.
@@ -48,15 +49,15 @@ interleave.
 
 | What | Limit |
 | --- | --- |
-| Request body | 1 MB (the client pushes in chunks of at most 20 records / 256 KB) |
-| Records per request | 20 (keeps D1 statements per request under the Workers **Free** plan's per-invocation query budget) |
+| Request body | 1 MB (the client pushes in chunks of at most 15 records / 256 KB) |
+| Records per request | 15 (about 3 D1 statements per record + ~6, so at most 38 in the worst case measured; the Workers **Free** plan's per-invocation query budget is assumed to be 50) |
 | One record | 256 KB (a very long brew curve); bigger ones are skipped and counted in the status |
 | Records per household | 20,000 (tombstones count) |
 | Requests per household | 120 per minute → `429` with `Retry-After` |
-| Wrong codes per caller IP | 10 per 10 minutes, then everything from that IP is refused for a while |
+| Wrong codes per caller IP | 10 per 10 minutes, then everything from that IP is refused for a while. The IP is `CF-Connecting-IP` only (set by Cloudflare); `X-Forwarded-For` is client-controlled and ignored |
 | Household creation | 5 per hour per IP |
 
-Codes and tokens are never logged. Errors are JSON `{ error, message }`; the `message` says what to do. Device clocks
+Authentication and the rate limits run before the request body is read. Codes and tokens are never logged. Errors are JSON `{ error, message }`; the `message` says what to do. Device clocks
 matter: `updatedAt` more than a day in the future is rejected, so a wrong clock can't win forever. Small drift just
 means the later-clocked edit wins. The ~37-bit code relies on the rate limits above for protection; set the optional
 `SYNC_PEPPER` secret (see DEPLOY.md) so a leaked database could not be brute-forced offline either. Cloudflare's own

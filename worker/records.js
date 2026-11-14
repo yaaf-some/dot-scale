@@ -25,8 +25,17 @@ export function stableStringify(v) {
 export function compare(a, b) {
   if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? 1 : -1;
   if (a.id !== b.id) return a.id > b.id ? 1 : -1;
-  const sa = stableStringify(a), sb = stableStringify(b);
-  return sa === sb ? 0 : sa > sb ? 1 : -1;
+  return compareUtf8(stableStringify(a), stableStringify(b));
+}
+
+/** Order strings by their UTF-8 bytes, which is exactly how SQLite compares TEXT (BINARY collation) in worker/storage.js.
+ *  Plain `<` on JS strings compares UTF-16 code units and disagrees for characters outside the BMP. */
+export function compareUtf8(x, y) {
+  if (x === y) return 0;
+  const bx = encoder.encode(x), by = encoder.encode(y);
+  const n = Math.min(bx.length, by.length);
+  for (let i = 0; i < n; i++) if (bx[i] !== by[i]) return bx[i] > by[i] ? 1 : -1;
+  return bx.length === by.length ? 0 : bx.length > by.length ? 1 : -1;
 }
 
 /** A tombstone only needs its envelope; dropping the rest frees space (brew samples are large). */

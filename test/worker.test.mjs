@@ -369,20 +369,84 @@ test('limit:0 probes the household without returning data', async () => {
   assert.equal(r.json.more, true);
 });
 
-test('D1 budget: a full push and a pull stay within 50 statements per request (Workers Free per-invocation limit)', async () => {
+test('D1 budget: even the worst request keeps >= 10 statements of margin under the Workers Free limit of 50', async () => {
+  const run = async (limits) => {
+    const s = makeServer({ limits }); const code = await newHousehold(s);
+    const changes = (u) => Array.from({ length: LIMITS.maxChangesPerRequest }, (_, i) => rec(`brew-${String(i).padStart(4, '0')}`, u + i));
+    const used = {};
+    s.d1.queries = 0; const push = await post(s, code, { since: 0, changes: changes(100) });
+    assert.equal(push.json.accepted, LIMITS.maxChangesPerRequest); used.push = s.d1.queries;
+    s.d1.queries = 0; await post(s, code, { since: 0, changes: changes(1) }); used.conflictingPush = s.d1.queries; // every record loses -> restamp path
+    s.d1.queries = 0; await post(s, code, { since: 0, changes: [] }); used.pull = s.d1.queries;
+    return used;
+  };
+  for (const [label, limits] of [['normal', undefined], ['near the record cap (extra count/exists queries)', { maxRecords: LIMITS.maxChangesPerRequest }]]) {
+    const used = await run(limits);
+    for (const [k, n] of Object.entries(used)) assert.ok(n <= 40, `${label}: ${k} used ${n} statements`);
+  }
+});
+
+test('record-cap queries are skipped for normal households (rev/2 bounds the record count)', async () => {
   const s = makeServer(); const code = await newHousehold(s);
-  const changes = Array.from({ length: LIMITS.maxChangesPerRequest }, (_, i) => rec(`brew-${String(i).padStart(4, '0')}`, 100 + i));
-  s.d1.queries = 0;
-  const push = await post(s, code, { since: 0, changes });
-  assert.equal(push.json.accepted, LIMITS.maxChangesPerRequest);
-  assert.ok(s.d1.queries <= 50, `push used ${s.d1.queries} statements`);
-  // second push where every record conflicts (restamp path) and the caller is behind
-  s.d1.queries = 0;
-  await post(s, code, { since: 0, changes: changes.map((c) => ({ ...c, updatedAt: 1 })) });
-  assert.ok(s.d1.queries <= 50, `conflicting push used ${s.d1.queries} statements`);
-  s.d1.queries = 0;
-  await post(s, code, { since: 0, changes: [] });
-  assert.ok(s.d1.queries <= 10, `pull used ${s.d1.queries} statements`);
+  s.d1.log.length = 0;
+  await post(s, code, { since: 0, changes: [rec('brew-0001', 1)] });
+  assert.ok(!s.d1.log.some((q) => /COUNT\(\*\)/.test(q)), 'no COUNT(*) on a small household');
+  const lim = makeServer({ limits: { maxRecords: 4 } }); const c2 = await newHousehold(lim);
+  await post(lim, c2, { since: 0, changes: [1, 2, 3, 4, 5, 6].map((i) => rec(`brew-000${i}`, i)) });
+  assert.equal(lim.d1.sql('SELECT COUNT(*) n FROM records')[0].n, 4, 'but the cap still holds when it matters');
+});
+
+test('tie-break: JS compare() and the SQL upsert agree, including characters outside the BMP', async () => {
+  // Same id and updatedAt, differing only by U+FFFF (BMP, UTF-16 unit 0xFFFF) vs U+1F600 (astral, surrogate 0xD83D...).
+  // UTF-16 code-unit order puts the astral one first; UTF-8 byte order (what SQLite BINARY uses) puts it last.
+  const bmp = rec('brew-0001', 500, { notes: '\uffff' }), astral = rec('brew-0001', 500, { notes: '\u{1F600}' });
+  assert.equal(compare(astral, bmp), 1, 'UTF-8 byte order: U+1F600 > U+FFFF');
+  for (const order of [[bmp, astral], [astral, bmp]]) {
+    const s = makeServer(); const code = await newHousehold(s);
+    await post(s, code, { since: 0, changes: [order[0]] });
+    await post(s, code, { since: 0, changes: [order[1]] });
+    assert.equal((await post(s, code, { since: 0 })).json.changes[0].notes, '\u{1F600}', 'same winner whichever arrives first');
+  }
+  const s = makeServer(); const code = await newHousehold(s);
+  const same = await post(s, code, { since: 0, changes: [bmp, astral] }); // in one request: JS de-duplication must agree too
+  assert.equal(same.json.accepted, 1);
+  assert.equal((await post(s, code, { since: 0 })).json.changes[0].notes, '\u{1F600}');
+});
+
+test('the caller IP comes only from CF-Connecting-IP: a rotating X-Forwarded-For does not dodge the wrong-code limit', async () => {
+  const s = makeServer();
+  for (let i = 0; i < LIMITS.ipFailuresPer10Min; i++) {
+    const r = await call(s.sync, { ip: '192.0.2.77', headers: { authorization: `Bearer wrong-guess-here-${2000 + i}`, 'x-forwarded-for': `10.9.8.${i}` }, body: { since: 0 } });
+    assert.equal(r.status, 401);
+  }
+  const blocked = await call(s.sync, { ip: '192.0.2.77', headers: { authorization: 'Bearer wrong-guess-here-9999', 'x-forwarded-for': '10.1.1.1' }, body: { since: 0 } });
+  assert.equal(blocked.status, 429, 'same CF-Connecting-IP stays limited however X-Forwarded-For changes');
+});
+
+test('authentication and rate limits come before reading the body', async () => {
+  const mk = (server, auth) => new Request('https://x.test/api/sync', { method: 'POST', headers: { authorization: auth, 'CF-Connecting-IP': '203.0.113.9' }, body: '{"since":0}' });
+  const s = makeServer(); const code = await newHousehold(s);
+  for (const auth of ['Bearer maple-tiger-orbit-0000', 'Bearer nonsense']) { // unknown household, malformed code
+    const req = mk(s, auth);
+    assert.equal((await s.sync(req)).status, 401);
+    assert.equal(req.bodyUsed, false, `body of an unauthenticated request must not be read (${auth})`);
+  }
+  const ok = mk(s, `Bearer ${code}`);
+  assert.equal((await s.sync(ok)).status, 200);
+  assert.equal(ok.bodyUsed, true, 'an authenticated request reads it');
+  const lim = makeServer({ limits: { syncPerMinute: 1 } }); const c2 = await newHousehold(lim);
+  assert.equal((await lim.sync(mk(lim, `Bearer ${c2}`))).status, 200);
+  const limited = mk(lim, `Bearer ${c2}`);
+  assert.equal((await lim.sync(limited)).status, 429);
+  assert.equal(limited.bodyUsed, false, 'a rate-limited request does not read it either');
+});
+
+test('client and Worker share one definition of a valid household code', async () => {
+  const client = await import('../app/sync/client.js');
+  const handlers = await import('../worker/handlers.js');
+  assert.equal(client.isValidCodeFormat, handlers.isValidCodeFormat);
+  assert.equal(client.normalizeCode, handlers.normalizeCode);
+  for (let i = 0; i < 200; i++) assert.ok(client.isValidCodeFormat(generateCode()));
 });
 
 test('a merge is atomic: if the batch fails nothing is written and the rev does not move', async () => {

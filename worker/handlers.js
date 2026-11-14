@@ -7,12 +7,13 @@
 //  - Errors are JSON { error, message }; `message` says what happened and what to do.
 
 import { WORDS } from './words.js';
+import { normalizeCode, isValidCodeFormat } from '../app/sync/code.js'; // shared with the browser client
 import { byteLength, compare, stableStringify, validateRecord } from './records.js';
 
 export const LIMITS = Object.freeze({
   maxRequestBytes: 1024 * 1024,   // 1 MB per request (spec)
   maxRecordBytes: 256 * 1024,     // one record; a 30 min brew at 10 Hz is ~200 KB
-  maxChangesPerRequest: 20,       // keeps D1 statements per request under the Workers Free per-invocation query budget
+  maxChangesPerRequest: 15,       // ~3 D1 statements per record + ~6: keeps a request well under the Workers Free budget (50)
   maxRecords: 20000,              // per household (spec)
   pageRecords: 100,               // records per pull page
   pageBytes: 700 * 1024,          // soft cap on a response so it stays well under 1 MB
@@ -41,12 +42,7 @@ export function generateCode(rand = randomInt) {
   return `${w()}-${w()}-${w()}-${String(rand(10000)).padStart(4, '0')}`;
 }
 
-export function normalizeCode(input) {
-  return String(input ?? '').trim().toLowerCase().replace(/[\s_]+/g, '-');
-}
-
-const CODE_RE = /^[a-z0-9]+(?:-[a-z0-9]+){2,5}$/;
-export const isValidCodeFormat = (c) => typeof c === 'string' && c.length <= 64 && CODE_RE.test(c);
+export { normalizeCode, isValidCodeFormat };
 
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 const enc = new TextEncoder();
@@ -58,7 +54,9 @@ export async function hashCode(code, pepper = '') {
 }
 
 async function ipKeyPart(request) {
-  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For')?.split(',')[0].trim() || 'unknown';
+  // Only CF-Connecting-IP: Cloudflare sets it and overwrites client-supplied values. X-Forwarded-For is attacker-controlled,
+  // so it is never used. Without the header (local dev) everyone shares one bucket.
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   return hex(await crypto.subtle.digest('SHA-256', enc.encode(ip))).slice(0, 32);
 }
 
@@ -93,12 +91,18 @@ const rateLimited = (seconds) => new HttpError(429, 'rate_limited',
 const methodNotAllowed = () => new HttpError(405, 'method_not_allowed', 'Use POST for this endpoint.', { allow: 'POST' });
 const secondsToNext = (now, windowMs) => Math.max(1, Math.ceil((windowMs - (now % windowMs)) / 1000));
 
+const tooLarge = (maxBytes) => new HttpError(413, 'too_large',
+  `Request is over ${Math.round(maxBytes / 1024)} KB. Send fewer records per request (the app does this for you).`);
+
+/** Cheap early refusal from the declared Content-Length, before any database work or reading. */
+function checkDeclaredLength(request, maxBytes) {
+  const len = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(len) && len > maxBytes) throw tooLarge(maxBytes);
+}
+
 /** Read and parse the JSON body, refusing anything over `maxBytes` without buffering it all. */
 async function readJsonBody(request, maxBytes) {
-  const tooLarge = () => new HttpError(413, 'too_large',
-    `Request is over ${Math.round(maxBytes / 1024)} KB. Send fewer records per request (the app does this for you).`);
-  const len = Number(request.headers.get('Content-Length'));
-  if (Number.isFinite(len) && len > maxBytes) throw tooLarge();
+  checkDeclaredLength(request, maxBytes);
   const chunks = []; let total = 0;
   if (request.body) {
     const reader = request.body.getReader();
@@ -106,7 +110,7 @@ async function readJsonBody(request, maxBytes) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.length;
-      if (total > maxBytes) { reader.cancel().catch(() => {}); throw tooLarge(); }
+      if (total > maxBytes) { reader.cancel().catch(() => {}); throw tooLarge(maxBytes); }
       chunks.push(value);
     }
   }
@@ -159,18 +163,7 @@ export async function handleSync(request, rawDeps) {
 
     const code = bearerCode(request);
     if (!code) throw new HttpError(401, 'missing_code', 'Send the household code as "Authorization: Bearer <code>". Create or join a household in Settings → Sync.');
-    const body = await readJsonBody(request, L.maxRequestBytes);
-
-    const since = body.since ?? 0;
-    const changes = body.changes ?? [];
-    const limit = body.limit ?? L.pageRecords;
-    if (!Number.isSafeInteger(since) || since < 0) throw new HttpError(400, 'invalid_since', '"since" must be a whole number >= 0 (the rev from your last sync, or 0).');
-    if (!Array.isArray(changes)) throw new HttpError(400, 'invalid_changes', '"changes" must be an array of records.');
-    if (changes.length > L.maxChangesPerRequest) {
-      throw new HttpError(400, 'too_many_changes', `Send at most ${L.maxChangesPerRequest} records per request; split the push into chunks.`);
-    }
-    if (!Number.isSafeInteger(limit) || limit < 0) throw new HttpError(400, 'invalid_limit', '"limit" must be a whole number >= 0.');
-    const pageLimit = Math.min(limit, L.pageRecords);
+    checkDeclaredLength(request, L.maxRequestBytes);
 
     const now = d.now();
     const hash = await hashCode(code, d.pepper);
@@ -187,6 +180,19 @@ export async function handleSync(request, rawDeps) {
     const minute = Math.floor(now / 60_000);
     if ((await storage.hit(`rl:${hash}`, minute, (minute + 2) * 60_000)) > L.syncPerMinute) throw rateLimited(secondsToNext(now, 60_000));
 
+    // Only now (authenticated, within the rate limit) read and parse the body.
+    const body = await readJsonBody(request, L.maxRequestBytes);
+    const since = body.since ?? 0;
+    const changes = body.changes ?? [];
+    const limit = body.limit ?? L.pageRecords;
+    if (!Number.isSafeInteger(since) || since < 0) throw new HttpError(400, 'invalid_since', '"since" must be a whole number >= 0 (the rev from your last sync, or 0).');
+    if (!Array.isArray(changes)) throw new HttpError(400, 'invalid_changes', '"changes" must be an array of records.');
+    if (changes.length > L.maxChangesPerRequest) {
+      throw new HttpError(400, 'too_many_changes', `Send at most ${L.maxChangesPerRequest} records per request; split the push into chunks.`);
+    }
+    if (!Number.isSafeInteger(limit) || limit < 0) throw new HttpError(400, 'invalid_limit', '"limit" must be a whole number >= 0.');
+    const pageLimit = Math.min(limit, L.pageRecords);
+
     const reset = since > rev0; // server data was lost/replaced: tell the client to re-push everything
     const effSince = reset ? 0 : since;
 
@@ -201,8 +207,9 @@ export async function handleSync(request, rawDeps) {
     });
     let list = [...incoming.values()];
 
-    // ---- household record cap (only checked when it could matter: rev is an upper bound on the record count)
-    if (list.length && rev0 + 2 * list.length >= L.maxRecords) {
+    // ---- household record cap. Only checked when it could matter: every merged record reserves 2 revs, so rev0 / 2 is an
+    // upper bound on the record count (and the extra queries below are skipped for any normal household).
+    if (list.length && Math.floor(rev0 / 2) + list.length >= L.maxRecords) {
       const have = await storage.recordCount(hash);
       const existing = await storage.existingIds(hash, list.map((r) => r.id));
       let room = L.maxRecords - have;

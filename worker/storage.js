@@ -61,7 +61,7 @@ export function createD1Storage(db) {
 
     /**
      * Atomically (one D1 batch = one transaction): reserve 2n revs, upsert each record if it beats the stored one
-     * (last-writer-wins on updated_at, ties by canonical body), and re-stamp the stored copy of any record that
+     * (last-writer-wins on updated_at, ties by canonical body, compared as UTF-8 bytes like worker/records.js compare()), and re-stamp the stored copy of any record that
      * *beat* the pushed one so the pusher pulls the winner. `records`: [{ id, type, updatedAt, deleted, body }].
      * Winners get revs base+1..base+n, re-stamped losers base+n+1..base+2n (so the two are told apart afterwards).
      */
