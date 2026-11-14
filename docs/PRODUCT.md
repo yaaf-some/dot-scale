@@ -87,6 +87,9 @@ power off, etc., from the existing app), sync (household code), Advanced (debug 
 - **Automation**, with defaults that can be turned off:
   - Auto-tare after the dose step / when the cup is placed (a stable weight jump, then tare).
   - Auto-start the timer at the first sustained flow (> 0.2 g/s for ≥ 0.5 s) or the first weight gain on pour-over.
+  - Espresso timing: the scale sees drops, not the pump. With a `start` event (pump on) the timer covers *waiting* and records the
+    first-drop time; with auto-start the timer begins at the first drops, so `timeS` excludes the pump-to-first-drop lag, first-drop time is left
+    unset (never reported as 0), and `startSource: 'auto'` (vs `'manual'`) on the Brew record is how analysis knows which it has.
   - Espresso auto-stop: once yield nears target and flow drops to near 0 for 2 s → done. A cue at about 2 g before target
     ("stop the pump", with an optional beep) so the user can hit the yield despite the drip after stopping. The app learns the
     typical post-stop drip per profile/gear and suggests stopping that many grams early.
@@ -107,10 +110,14 @@ Done. Land on Home with a "Start your first brew" card.
 
 All records share this envelope: `{ id: string (uuid), type, updatedAt: ms epoch, deleted?: true, ...fields }`.
 Local store is **IndexedDB** (localStorage is too small for curves), with a tiny wrapper. Migrate the existing `localStorage`
-keys `dot.recipe`, `dot.autoStart`, `dot.beep`, `dot.history` on first run (history becomes Brew records under the first profile).
+keys `dot.recipe`, `dot.autoStart`, `dot.beep`, `dot.history` on first run (history becomes Brew records under the first profile, Yaaf; they carry `legacy: true` and method `pour-over`, the old
+app's default). Seed records (profiles Yaaf and Alexa, EC260, 16 g basket, naked and 2-spout portafilters) use **fixed ids** and
+`updatedAt: 1`, so devices that seed before syncing don't duplicate them and any real edit or delete wins.
+Device-local settings (active profile, theme, onboarded, known scale, autoStart, beep) live in `store.prefs` and are not synced.
 
 ```js
-Profile { id, type:'profile', name, color, emoji, createdAt, updatedAt }
+Profile { id, type:'profile', name, color, emoji, methods: string[] /* ordered method ids */, createdAt, updatedAt,
+          defaults?: { machineId?, grinderId?, portafilter?: 'naked'|'spouted', basketG? } }
 Gear    { id, type:'gear', kind:'espresso-machine'|'grinder'|'brewer'|'basket'|'portafilter', name, props:{}, updatedAt }
 Bean    { id, type:'bean', name, roaster, roastDate?: 'YYYY-MM-DD', process?, origin?, notes?, archived?, updatedAt }
 Recipe  { id, type:'recipe', profileId, method, name, dose, yield, ratio, tempC?, grind?:{text, value?}, steps?:Step[], favorite?, updatedAt }

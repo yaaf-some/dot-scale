@@ -8,6 +8,11 @@ import { createSyncClient, chunkRecords, formatStatus, SyncError, normalizeCode 
 
 const tick = () => new Promise((r) => setImmediate(r));
 const settle = async () => { for (let i = 0; i < 30; i++) await tick(); };
+/** Wait for a condition instead of guessing a tick count (WebCrypto runs on a real thread pool, so timing varies under load). */
+async function until(cond, what = 'condition', ms = 5000) {
+  const t0 = Date.now();
+  while (!cond()) { if (Date.now() - t0 > ms) throw new Error(`timed out waiting for ${what}`); await new Promise((r) => setTimeout(r, 1)); }
+}
 /** Wait until the client is idle. WebCrypto runs on a real thread pool, so fixed tick counts are not enough. */
 async function quiesce(idle) { for (let i = 0; i < 4; i++) { await tick(); await idle?.(); } }
 const rec = (id, updatedAt, extra = {}) => ({ id, type: 'brew', updatedAt, ...extra });
@@ -492,7 +497,7 @@ test('joining another household while a pull is being merged does not corrupt th
   const joining1 = D.client.joinHousehold(code1);
   await inMerge;                                   // household 1's records are being merged right now
   const joining2 = D.client.joinHousehold(code2);  // the user switches household meanwhile
-  await settle();
+  await until(() => D.client.getHouseholdCode() === code2, 'the switch to household 2');
   release();
   await Promise.all([joining1, joining2]);
   w.net.requests.length = 0;
@@ -506,14 +511,16 @@ test('joining another household while a pull is being merged does not corrupt th
 
 test('a debounce armed while a sync is failing cannot bypass Retry-After', async () => {
   const w = world({ limits: { syncPerMinute: 1 } });
-  let hold = null;
-  const D = w.device({ fetch: async (u, i) => { if (hold) await hold.promise; return w.fetch(u, i); } });
+  let hold = null, reached = false;
+  const D = w.device({ fetch: async (u, i) => { if (hold) { reached = true; await hold.promise; } return w.fetch(u, i); } });
   D.client.start();
   await D.client.createHousehold();                      // uses the single request allowed this minute
-  let release; hold = { promise: new Promise((r) => { release = r; }) };
+  let release;
+  reached = false;
+  hold = { promise: new Promise((r) => { release = r; }) };
   D.store.put(rec('brew-0001', 1));
   const syncing = D.client.syncNow();                     // request in flight (will be refused with 429)
-  await settle();
+  await until(() => reached, 'the request to be in flight');
   D.store.put(rec('brew-0002', 2));                       // an edit arms a 1.5 s debounce meanwhile
   hold = null; release();
   await syncing;

@@ -1,12 +1,10 @@
-# Security headers for the static app (Workers static assets). API responses set their own headers in the Worker.
+# Security headers for the static app (Workers static assets). Anything an API/Worker returns sets its own headers.
 #
-# CSP assumptions: the CURRENT shell (index.html) is one inline <script type="module">, an inline <style> block and
-# style="" attributes, and loads nothing from other origins. Hence 'unsafe-inline' for script and style for now.
-# TODO(security): once the new app shell (PR "App shell, design system") has landed on this branch:
-#   - script-src: remove 'unsafe-inline' -> "script-src 'self'" (that shell loads app/main.js as an external module).
-#   - style-src: remove 'unsafe-inline' too, after the one style="" attribute in its <noscript> is turned into a class.
-#     (JS setting element.style.x = ... is allowed by CSP; only style="" in markup/innerHTML needs 'unsafe-inline'.)
-# test/hosting.test.mjs fails if the CSP would break the app, and shows a TODO when it can be tightened.
+# CSP: the app shell has NO inline script and NO inline style (one external module script, external CSS files, no style=""
+# attributes in markup or innerHTML), so script-src and style-src are plain 'self'. JS setting element.style.x = ... is allowed
+# by CSP. If you ever need an inline script or style, prefer an external file; test/hosting.test.mjs fails if the CSP would
+# block what index.html or app/ does, and fails if 'unsafe-inline' is added without anything needing it.
+# connect-src 'self': the app only talks to its own origin (the sync API at /api).
 /*
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
@@ -14,4 +12,4 @@
   Cross-Origin-Opener-Policy: same-origin
   X-Frame-Options: DENY
   Permissions-Policy: bluetooth=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), interest-cohort=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

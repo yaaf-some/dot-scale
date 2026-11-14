@@ -51,7 +51,6 @@ test('_headers: security headers, Bluetooth stays allowed for the app, CSP is as
   assert.match(h, /object-src 'none'/);
   assert.match(h, /base-uri 'none'/);
   assert.match(h, /frame-ancestors 'none'/);
-  assert.match(h, /TODO/, 'the unsafe-inline CSP must carry a TODO to tighten it');
   // Everything the current shell loads is same-origin: no third-party hosts in the policy.
   assert.ok(!/https?:\/\//.test(h.split('\n').filter((l) => /Content-Security-Policy:/.test(l)).join('')), 'no external origins in the CSP');
 });
@@ -110,8 +109,8 @@ test("CSP doesn't block what index.html and app/ actually do (inline script/styl
   if (use.style) assert.ok(allowsInline('style-src'), "the page uses inline styles: style-src needs 'unsafe-inline' or they are dropped");
 });
 
-test("CSP can be tightened: no 'unsafe-inline' for script/style once nothing needs it", { todo: 'tighten _headers (see the TODO there) after the new app shell lands' }, () => {
+test("CSP stays tight: no 'unsafe-inline' unless something inline needs it", () => {
   const use = inlineUse();
-  assert.ok(!(allowsInline('script-src') && !use.script), "script-src still allows 'unsafe-inline' but nothing inline remains: use script-src 'self'");
-  assert.ok(!(allowsInline('style-src') && !use.style), "style-src still allows 'unsafe-inline' but nothing inline remains: use style-src 'self'");
+  assert.ok(!(allowsInline('script-src') && !use.script), "script-src allows 'unsafe-inline' but nothing inline remains: use script-src 'self'");
+  assert.ok(!(allowsInline('style-src') && !use.style), "style-src allows 'unsafe-inline' but nothing inline remains: use style-src 'self'");
 });

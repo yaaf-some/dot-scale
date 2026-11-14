@@ -156,13 +156,11 @@ HSTS (`max-age=31536000`, no `includeSubDomains`, no `preload`), `X-Content-Type
 keeps **Bluetooth for the app itself** and turns off camera, microphone, geolocation, payment, USB, serial and HID, and a CSP:
 `default-src 'self'`, `connect-src 'self'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`.
 
-**Assumptions, with a TODO:** the *current* shell (`index.html`) is a single inline module script plus an inline `<style>` block
-and `style=""` attributes, and loads nothing from other origins, so the CSP allows `'unsafe-inline'` for scripts and styles for
-now (with `script-src 'self'` today a Cloudflare deploy of the current shell would be a blank page). The new app shell (separate PR)
-loads `app/main.js` and its CSS as external files, so once it is on the integration branch: change `script-src` to `'self'`; and
-`style-src` to `'self'` after its single `style=""` attribute (inside a `<noscript>`) becomes a CSS class (JS that sets
-`element.style.x = ...` is fine under CSP; only `style=""` in markup or `innerHTML` needs `'unsafe-inline'`). `test/hosting.test.mjs`
-fails if the CSP would break the app and shows a TODO when it can be tightened. Keep `connect-src 'self'` unless the app needs another origin.
+**CSP is strict here:** `script-src 'self'` and `style-src 'self'`. The app shell has no inline script or style (one external module
+script, external CSS files, no `style=""` attributes in markup or `innerHTML`; JS that sets `element.style.x = ...` is allowed by
+CSP), and loads nothing from other origins; `connect-src 'self'` covers the sync API. `test/hosting.test.mjs` fails if the CSP would
+block what `index.html` or `app/` does, and fails if `'unsafe-inline'` is added without anything needing it. (On `main`'s older,
+inline shell the minimal hosting PR still needs `'unsafe-inline'`; this branch replaces that file and tightens it.)
 
 Cloudflare Access (a login in front of the site) is **not** enabled: it would interrupt the installed app and the
 Bluetooth flow. It is an optional later step if you ever want the whole site private.
