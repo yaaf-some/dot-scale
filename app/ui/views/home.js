@@ -56,7 +56,8 @@ export async function mount(root, ctx) {
   ]);
   const mine = (r) => r.profileId === profile?.id;
   const myRecipes = recipes.filter(mine), myBrews = brews.filter(mine);
-  const items = brewAgainItems(myRecipes, myBrews, beans);
+  const brewable = myBrews.filter((b) => !b.incomplete); // an interrupted shot isn't a recipe to repeat
+  const items = brewAgainItems(myRecipes, brewable, beans);
   const nudge = pickNudge({ store, scale: ctx.scale, profile, brews: myBrews, beans, now: Date.now() });
 
   const switcher = h('div', { class: 'profile-bar', role: 'group', 'aria-label': 'Who’s brewing' },

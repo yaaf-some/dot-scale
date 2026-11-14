@@ -60,6 +60,7 @@ test('editRecipe keeps dose, ratio and yield linked and scales custom steps', ()
   const c = editRecipe(r, 'yield', 40);
   assert.deepEqual([c.dose, c.ratio], [16, 2.5]);
   assert.equal(editRecipe(r, 'dose', NaN).dose, 16);
+  assert.equal(editRecipe(r, 'ratio', 2.5).steps[0].targetG, 40, 'a ratio change moves the water, so the step targets follow');
   assert.equal(editRecipe(r, 'tempC', 90).tempC, 90);
 });
 
@@ -146,6 +147,7 @@ test('an interrupted shot is kept as an incomplete Brew, and the finished one re
   assert.equal(shouldKeepPartial({ yield: 0, timeS: 0.5 }), false);
   assert.equal(shouldKeepPartial({ yield: 5, timeS: 0 }), true);
   assert.equal(shouldKeepPartial({ yield: 0, timeS: 4 }), true);
+  assert.equal(shouldKeepPartial({ method: 'moka', yield: 130, timeS: 0.2 }), false, 'moka yield is the water, not output');
   const store = createStore(memoryAdapter());
   const part = buildPartialBrew({ id: 'same', record: { ...record, yield: 12, timeS: 9 }, profile: alexa, recipe: { method: 'espresso' }, startedAt: 5 });
   assert.equal(part.incomplete, true);

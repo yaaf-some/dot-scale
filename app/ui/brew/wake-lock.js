@@ -10,7 +10,8 @@ export function createWakeLock() {
     pending = true;
     try {
       lock = await navigator.wakeLock.request('screen');
-      lock.addEventListener('release', () => { lock = null; });
+      const sentinel = lock;
+      sentinel.addEventListener('release', () => { if (lock === sentinel) lock = null; });
       if (!wanted) release();
     } catch { lock = null; } finally { pending = false; } // refused (battery saver, permissions): fine
   }

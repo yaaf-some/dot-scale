@@ -14,8 +14,10 @@ export function layout(points, { targetG, tEnd, w, hgt, pad = { l: 8, r: 8, t: 8
   if (!points || points.length < 2) return null;
   const t1 = Math.max(tEnd ?? 0, points[points.length - 1].t, 10);
   const t0 = Math.min(0, points[0].t);
-  const gMax = niceMax(Math.max(targetG ?? 0, ...points.map((p) => p.g), 1) * 1.08, [10, 20, 40, 60, 100, 150, 250, 400, 600, 1000]);
-  const fMax = niceMax(Math.max(...points.map((p) => p.f), 0.5) * 1.15, [1, 2, 3, 5, 8, 12, 20, 40]);
+  let gTop = Math.max(targetG ?? 0, 1), fTop = 0.5;
+  for (const p of points) { if (p.g > gTop) gTop = p.g; if (p.f > fTop) fTop = p.f; }
+  const gMax = niceMax(gTop * 1.08, [10, 20, 40, 60, 100, 150, 250, 400, 600, 1000]);
+  const fMax = niceMax(fTop * 1.15, [1, 2, 3, 5, 8, 12, 20, 40]);
   const iw = w - pad.l - pad.r, ih = hgt - pad.t - pad.b;
   const x = (t) => pad.l + ((t - t0) / (t1 - t0)) * iw;
   const yG = (g) => pad.t + ih - (Math.max(0, g) / gMax) * ih;

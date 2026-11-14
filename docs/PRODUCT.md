@@ -129,6 +129,7 @@ Brew    { id, type:'brew', profileId, method, recipeId?, beanId?, gear:{machine?
           samples: { hz: 10, t0: 0, channels: { weight: number[], flow: number[] /* future: pressure, temp */ } },
           metrics: {...from insights}, insights: {...from insights}, taste?: {balance:-2..2, strength:-2..2, stars:1..5, spurts?:bool},
           notes?, updatedAt,
+          incomplete?: true /* a shot interrupted mid-brew (Back, tab, page hidden), kept so nothing is lost; the finished brew replaces it */,
           /* from the brew session, all optional: */ startSource?:'auto'|'manual', doneReason?, stopS?, dripAfterStopG?, stopLeadG?, stepLog?, pourEndS?, water? }
 Step    { kind:'bloom'|'pour'|'wait'|'stir'|'press'|'plunge'|'swirl'|'heat', targetG?, atS?, durationS?, label }
 ```

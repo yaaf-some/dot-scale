@@ -6,7 +6,7 @@ import { getMethod } from '../../methods/index.js';
 import { methodOrder } from '../../core/brew-record.js';
 
 export function renderPicker(root, ctx, { brews }) {
-  const mine = brews.filter((b) => b.profileId === ctx.profile?.id);
+  const mine = brews.filter((b) => b.profileId === ctx.profile?.id && !b.incomplete);
   const order = methodOrder(ctx.profile, mine);
   const last = (id) => mine.filter((b) => b.method === id).sort((a, b) => b.startedAt - a.startedAt)[0];
   const tile = (id, i) => {

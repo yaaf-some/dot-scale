@@ -63,7 +63,7 @@ export function startingRecipe({ method, profile, recipes = [], brews = [], reci
   if (rec) { recipe = recipeFromRecord(rec); source = 'recipe'; usedRecipeId = rec.id; }
   else if (past) { recipe = recipeFromBrew(past); source = 'brew'; usedRecipeId = past.recipeId ?? null; }
   else {
-    const last = brews.filter(mine).sort(newest)[0];
+    const last = brews.filter((b) => mine(b) && !b.incomplete).sort(newest)[0];
     if (last) { recipe = recipeFromBrew(last); source = 'last'; usedRecipeId = last.recipeId ?? null; }
     else {
       const fav = recipes.filter(mine).sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || b.updatedAt - a.updatedAt)[0];
@@ -79,8 +79,8 @@ export function startingRecipe({ method, profile, recipes = [], brews = [], reci
 export function editRecipe(recipe, field, value) {
   if (field === 'dose' || field === 'ratio' || field === 'yield') {
     const next = linkRecipe(recipe, field, value);
-    const was = field === 'dose' ? recipe.dose : recipe.yield, now = field === 'dose' ? next.dose : next.yield;
-    if (field !== 'ratio' && Array.isArray(recipe.steps) && was > 0 && now > 0) {
+    const was = field === 'dose' ? recipe.dose : recipe.yield, now = field === 'dose' ? next.dose : next.yield; // ratio changes the water too
+    if (Array.isArray(recipe.steps) && was > 0 && now > 0) {
       const f = now / was;
       next.steps = recipe.steps.map((s) => (Number.isFinite(s.targetG) ? { ...s, targetG: round(s.targetG * f, 1) } : { ...s }));
     }
@@ -130,7 +130,7 @@ export function buildBrew({ id = uuid(), record, profile, recipe, recipeId, bean
 
 /** A shot that has started is worth keeping even if the user leaves before it ends (Back, swipe-back, tab, page hidden). */
 export function shouldKeepPartial(record) {
-  return !!record && (record.yield > 0 || record.timeS >= 2);
+  return !!record && (record.timeS >= 2 || (record.yield > 0 && record.method !== 'moka')); // moka's yield is the water, known before the heat is on
 }
 
 /** What is saved when a started brew is interrupted: the run so far, marked `incomplete`. Saving the finished brew under the same id replaces it. */

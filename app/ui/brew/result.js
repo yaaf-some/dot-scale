@@ -118,7 +118,7 @@ export function renderResult(host, F) {
   const discard = h('button', { class: 'btn quiet danger', type: 'button', 'data-testid': 'discard-brew', onclick: async () => {
     if (!(await confirmDialog({ title: 'Discard this brew?', message: 'It won’t be saved to your journal.', confirmLabel: 'Discard', danger: true }))) return;
     state.discarded = true; clearTimeout(autosave); clearTimeout(edit);
-    saving.then(() => state.saved && ctx.store.delete(id));
+    saving.then(() => ctx.store.delete(id)); // also removes an interrupted copy saved earlier under this id
     F.done();
   } }, 'Discard');
 

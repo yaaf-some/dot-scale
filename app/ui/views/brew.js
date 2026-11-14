@@ -51,7 +51,7 @@ export async function mount(root, ctx) {
     ctx, method,
     recipe: start.recipe, recipeId: start.recipeId, source: start.source,
     beans, beanId: beans.some((b) => b.id === start.recipe.beanId && !b.deleted) ? start.recipe.beanId : null,
-    history: brews.filter((b) => b.profileId === profile?.id && b.method === method.id),
+    history: brews.filter((b) => b.profileId === profile?.id && b.method === method.id && !b.incomplete),
     run: null, brewId: null, taste: null, notes: '',
     stage: null,
     go(name) {
