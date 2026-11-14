@@ -127,20 +127,26 @@ Step    { kind:'bloom'|'pour'|'wait'|'stir'|'press'|'plunge'|'swirl'|'heat', tar
 ```
 `samples` are stored downsampled to 10 Hz (a 40 s shot is ~800 numbers). Curves from before the migration may be absent; the UI must handle that.
 
-## 7. Sync (household)
+## 7. Sync (household) and hosting
+
+**Decision (owner, Nov 14 2026):** host everything on **Cloudflare** (domain `yaafsome.fyi`, app at `coffee.yaafsome.fyi`)
+instead of Vercel, because the owner prefers Cloudflare's security. The owner chose "Host it all on Cloudflare" when asked.
+The live site stays on Vercel until the owner cuts over; nothing here may break Vercel's static deploy of `main` before then.
+
 - **Local-first:** the app works fully offline; sync runs in the background when online.
-- **Household code:** the first device creates a household and shows a code (e.g. `maple-tiger-orbit-42`). Other devices join by entering it.
-  No accounts or passwords. The server stores only a hash of the code. Profiles live inside the household.
-- **API** (Vercel serverless function, Node runtime, **no npm dependencies**: use the Upstash Redis REST API via `fetch`):
-  - `POST /api/household` → `{ code }` (creates one)
-  - `POST /api/sync` with header `Authorization: Bearer <code>` and body `{ since: rev, changes: Record[] }` → `{ rev, changes: Record[] }`.
-    The server merges per record with **last-writer-wins on `updatedAt`** (ties broken by id), stamps a monotonically increasing `rev`
-    (Redis `INCR`), and returns everything newer than `since`. Deletes are tombstones (`deleted: true`).
-  - Limits: 1 MB per request, 20k records per household, basic rate limit per household.
-- Env vars: `KV_REST_API_URL` / `KV_REST_API_TOKEN` (Vercel Marketplace Upstash integration). Also accept the
-  `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` names. **The owner must add the Upstash Redis integration to the
-  Vercel project**; until then the client shows "Sync not set up" and keeps working locally.
-- Tests run against an in-memory fake of the REST API; no real Redis in CI.
+- **Household code:** the first device creates a household and shows a code (e.g. `maple-tiger-orbit-42`). Other devices join by
+  entering it. No accounts or passwords. The server stores only a hash of the code. Profiles live inside the household.
+- **Backend:** a Cloudflare Worker (`worker/index.js`, no npm dependencies) serving the static app through Workers static assets and
+  handling `/api/*`. Storage is **D1 (SQLite)**, not KV: sync needs a strictly increasing per-household `rev`, which KV's eventual
+  consistency can't give. All storage sits behind one small adapter with an in-memory fake for tests. No `api/` directory (Vercel would
+  treat it as functions).
+- **API:** `POST /api/household` → `{ code }`; `POST /api/sync` with `Authorization: Bearer <code>` and body `{ since, changes }` →
+  `{ rev, changes }`. Merge per record by last-writer-wins on `updatedAt` (ties by id); deletes are tombstones. Limits: 1 MB per request,
+  a record cap per household, rate limit by household hash.
+- **Security:** `_headers` with HSTS, nosniff, referrer policy, a CSP as tight as the shell allows (`'unsafe-inline'` is acceptable
+  temporarily until the new shell removes inline scripts/styles; tighten afterwards) and a Permissions-Policy that keeps Bluetooth for
+  the app itself. Never log codes or tokens. Cloudflare Access is optional later (it would interrupt the installed app).
+- **Deploy:** Cloudflare Workers Builds from GitHub; steps in `docs/DEPLOY.md`. The owner performs the dashboard steps.
 
 ## 8. Insights engine (pure module, no DOM)
 `analyze(brew, { method, gear, history }) → { metrics, verdict, tips: Tip[], learn: string[] /* card ids */ }`

@@ -60,6 +60,7 @@ const pw = require('playwright');
     await page.waitForSelector('.ticket:has-text("Pour-over")');
     check(true, 'switching to Yaaf shows the migrated legacy brew under Brew again');
 
+    check(await page.locator('.tab .icon svg path, .tab .icon svg rect, .tab .icon svg circle').count() > 5, 'tab icons render as SVG');
     await page.click('a.tab:has-text("Settings")');
     await page.waitForSelector('#profiles');
     await page.click('button:has-text("Add beans")');

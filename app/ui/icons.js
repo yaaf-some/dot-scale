@@ -20,9 +20,30 @@ const P = {
   moka: '<path d="m8 4 1 4h6l1-4zM9 8l-2 12h10L15 8z"/><path d="M12 12v4"/>',
   prestina: '<path d="M7 20h10M8 20V8h8v12M10 8V4h4v4"/><path d="M8 13h8"/>',
 };
+const NS = 'http://www.w3.org/2000/svg';
+const cache = new Map();
+
+/** Static path strings above → [[tag, {attr: value}]…], parsed once. Only this file's own constants go through here. */
+function shapes(name) {
+  if (!cache.has(name)) {
+    cache.set(name, [...(P[name] ?? '').matchAll(/<(\w+)([^>]*?)\/?>/g)].map(([, tag, attrs]) => [tag, Object.fromEntries([...attrs.matchAll(/([\w-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]))]));
+  }
+  return cache.get(name);
+}
+
+/** Built with DOM APIs only: `label` is set as an attribute value, so it can never become markup. */
 export function icon(name, { size = 24, label } = {}) {
   const span = document.createElement('span');
   span.className = 'icon';
-  span.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${P[name] ?? ''}</svg>`;
+  const svg = document.createElementNS(NS, 'svg');
+  const attrs = { viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor', 'stroke-width': '1.75', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+  if (label) Object.assign(attrs, { role: 'img', 'aria-label': label }); else attrs['aria-hidden'] = 'true';
+  for (const [k, v] of Object.entries(attrs)) svg.setAttribute(k, v);
+  for (const [tag, a] of shapes(name)) {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(a)) el.setAttribute(k, v);
+    svg.append(el);
+  }
+  span.append(svg);
   return span;
 }

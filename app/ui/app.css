@@ -257,3 +257,4 @@ details.adv[open] > summary::after { transform: rotate(-135deg); }
   ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--t-base); }
 }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+.noscript { padding: var(--s4); }
