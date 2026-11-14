@@ -2,6 +2,8 @@
 
 Static web app for the Timemore Dot (TES017) Bluetooth scale. No build step, no dependencies.
 Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deploys to production**.
+Moving to Cloudflare (Worker + static assets, https://coffee.yaafsome.fyi): config is in `wrangler.jsonc`, `_headers` and
+`.assetsignore`; owner steps and the cutover are in `docs/DEPLOY.md`. Don't add an `api/` folder (Vercel would treat it as functions).
 
 ## Read first
 - **`docs/PRODUCT.md`** is the product spec and the contracts between modules (data model, insights, sync). Follow it;
@@ -18,7 +20,8 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737).
 - `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
 - `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
-- `.vercelignore` keeps tests/scripts out of the deployment.
+- `.vercelignore` keeps tests/scripts (and the Cloudflare-only files) out of the Vercel deployment.
+- `.assetsignore` is the same idea for Cloudflare: anything not listed there is **publicly served**, so add new private files to it.
 
 ## Commands
 - `npm test` — unit tests
