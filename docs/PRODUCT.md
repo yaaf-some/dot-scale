@@ -131,7 +131,10 @@ Step    { kind:'bloom'|'pour'|'wait'|'stir'|'press'|'plunge'|'swirl'|'heat', tar
   - `POST /api/household` → `{ code }` (creates one)
   - `POST /api/sync` with header `Authorization: Bearer <code>` and body `{ since: rev, changes: Record[] }` → `{ rev, changes: Record[] }`.
     The server merges per record with **last-writer-wins on `updatedAt`** (ties broken by id), stamps a monotonically increasing `rev`
-    (Redis `INCR`), and returns everything newer than `since`. Deletes are tombstones (`deleted: true`).
+    (Redis `INCRBY`), and returns everything newer than `since`. Deletes are tombstones (`deleted: true`; the server keeps only
+    the envelope). The response is `{ rev, changes, more, accepted, rejected, reset }`: it is paged (`more` → call again with
+    `since = rev`), `rejected` lists records refused with a reason, and `reset` means the server lost its data so the client
+    re-pushes everything. Details, limits and the store contract (`changesSince`/`applyRemote`) are in `docs/SYNC.md`.
   - Limits: 1 MB per request, 20k records per household, basic rate limit per household.
 - Env vars: `KV_REST_API_URL` / `KV_REST_API_TOKEN` (Vercel Marketplace Upstash integration). Also accept the
   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` names. **The owner must add the Upstash Redis integration to the
