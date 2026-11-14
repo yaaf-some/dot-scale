@@ -1,6 +1,8 @@
 name: CI
 
 # Runs on every pull request and on pushes to main. Same checks as `npm run check` locally.
+# Public repo: only the `pull_request` trigger (forks get a read-only token and no secrets). Never switch this to
+# `pull_request_target`, and never add secrets to a job that runs PR code.
 on:
   pull_request:
   push:
