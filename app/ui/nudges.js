@@ -1,16 +1,26 @@
 // The Home screen shows at most ONE nudge. Any module can register a source; the highest priority wins.
 //   registerNudge(priority, (data) => nudge | null)
-//   data  = { store, scale, profile, brews, beans, now }      (brews = this profile's, newest first)
+//   data  = { store, scale, profile, brews, beans, now, dismissed }   (brews = this profile's, newest first; dismissed = { [nudgeId]: ms })
 //   nudge = { id, tone: 'info' | 'warn', text, action?: { label, href } }
+// Nudges can be dismissed (the id is remembered on this device); 'warn' ones can't. Ids that include a brew or bean id come back
+// when there is something new to say.
 // The insights worker plugs in here for "your last 3 shots ran fast…" style nudges (suggested priority 60).
 const sources = [];
 export function registerNudge(priority, fn) { sources.push({ priority, fn }); sources.sort((a, b) => b.priority - a.priority); }
 
 export function pickNudge(data) {
+  const dismissed = data.store?.prefs?.get('nudgeDismissed', {}) ?? {};
+  const full = { ...data, dismissed };
   for (const { fn } of sources) {
-    try { const n = fn(data); if (n) return n; } catch (e) { console.error('nudge source failed', e); }
+    try { const n = fn(full); if (n && !(dismissed[n.id] && n.tone !== 'warn')) return n; } catch (e) { console.error('nudge source failed', e); }
   }
   return null;
+}
+
+export async function dismissNudge(store, id) {
+  const all = { ...store.prefs.get('nudgeDismissed', {}), [id]: Date.now() };
+  const keep = Object.entries(all).sort((a, b) => b[1] - a[1]).slice(0, 60); // don't grow forever
+  await store.prefs.set('nudgeDismissed', Object.fromEntries(keep));
 }
 
 const DAY = 86400000;

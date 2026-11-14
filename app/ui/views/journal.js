@@ -1,15 +1,20 @@
-// Journal: STUB with its empty state. History by day, detail, compare and per-bean dial-in trail are built by another worker.
-import { h } from '../dom.js';
-import { emptyState } from '../components.js';
+// Journal: history by day (list), one brew (detail), compare two brews, and the dial-in trail per bean.
+//   #/journal                      list      #/journal/brew/<id>              detail
+//   #/journal/compare/<a>/<b>      compare   #/journal/bean/<id>?method=…     dial-in trail
+// The pieces live in app/ui/journal/; they are imported statically so the offline warm-up caches them with this view.
+import { ensureStyles } from '../journal/shared.js';
+import * as list from '../journal/list.js';
+import * as detail from '../journal/detail.js';
+import * as compare from '../journal/compare.js';
+import * as trail from '../journal/trail.js';
 
 export const meta = { title: 'Journal' };
 
 export async function mount(root, ctx) {
-  const brews = (await ctx.store.list('brew')).filter((b) => b.profileId === ctx.profile?.id);
-  root.append(h('div', { class: 'view-head' }, h('h1', {}, 'Journal')),
-    brews.length
-      ? emptyState({ iconName: 'journal', title: `${brews.length} saved brew${brews.length === 1 ? '' : 's'}`, text: 'They’re safe in this browser. The journal that shows them, with curves and what to change next, is being built.',
-        actions: [h('a', { class: 'btn primary', href: '#/brew' }, 'Start a brew')] })
-      : emptyState({ iconName: 'journal', title: 'No brews yet', text: 'Each brew you save lands here with its curve, a takeaway, and what to try next. Your bean dial-in trail builds up over time.',
-        actions: [h('a', { class: 'btn primary', href: '#/brew' }, 'Start a brew')] }));
+  await ensureStyles();
+  const [sub, a, b] = ctx.params;
+  if (sub === 'brew' && a) return detail.mount(root, ctx, a);
+  if (sub === 'compare' && a && b) return compare.mount(root, ctx, a, b);
+  if (sub === 'bean' && a) return trail.mount(root, ctx, a);
+  return list.mount(root, ctx);
 }
