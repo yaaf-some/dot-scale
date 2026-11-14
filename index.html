@@ -7,6 +7,12 @@
 <title>Dot Scale</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dot Scale">
 <style>
   :root {
     --bg: #16120f; --panel: #211b17; --panel-2: #2b241f; --line: #3a312a;
@@ -611,6 +617,19 @@ $('demoBtn').onclick = () => (state.demo ? stopDemo() : startDemo());
 
 setConnected(false);
 render();
+
+// Offline support (sw.js). Not available in every browser (e.g. some iOS WebViews) — the app works without it.
+// On the first visit the worker isn't controlling this page yet, so hand it the files we already loaded to cache.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(() => navigator.serviceWorker.ready)
+    .then((reg) => {
+      const urls = [location.href, ...performance.getEntriesByType('resource').map((e) => e.name)]
+        .filter((u) => new URL(u).origin === location.origin);
+      reg.active?.postMessage({ type: 'cache-urls', urls });
+    })
+    .catch((e) => console.warn('Service worker not registered:', e));
+}
 </script>
 </body>
 </html>
