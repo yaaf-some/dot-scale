@@ -17,8 +17,8 @@ The new app lives on the **integration branch** (`claude/admiring-brahmagupta-2r
 only changes at the single release PR. A first, minimal Cloudflare config (assets-only, for the *current* app) is already on
 `main`; this branch replaces it with the full config (Worker API, D1 binding, strict security headers) at release. Until you
 disconnect Vercel, it keeps serving the live site. To try the new app on Cloudflare before the release, use the staging steps
-(section "Try the integration branch on your phone", below). Because this branch binds a D1 database, the preview build needs
-the database to exist first: create it and put its id in `wrangler.jsonc` (section "Household sync").
+(section "Try the integration branch on your phone", below). Household sync is optional and OFF by default (the D1 block in
+`wrangler.jsonc` is commented out), so the site deploys with no database; enable sync later (section "Household sync").
 
 ## 2. Connect the GitHub repo (Workers Builds)
 
@@ -138,8 +138,10 @@ Sync is optional and separate from hosting: until you do this, the app shows "Sy
    npx wrangler login
    npx wrangler d1 create dot-scale
    ```
-   Put the printed `database_id` into `wrangler.jsonc` (replacing `REPLACE_WITH_D1_DATABASE_ID`) and commit it to `main`
-   (a D1 database id is a resource id, not an account id or a secret; the Cloudflare account id and API tokens never go into the repo). **Do this before merging the sync PR, or its first deploy fails.**
+   Then **uncomment the `d1_databases` block in `wrangler.jsonc`** and put the printed `database_id` in place of
+   `REPLACE_WITH_D1_DATABASE_ID`, and commit it (a D1 database id is a resource id, not an account id or a secret; the Cloudflare
+   account id and API tokens never go into the repo). Claude can do this edit for you if you send the id. With the block enabled and
+   the placeholder id still there, a deploy fails (a test guards against merging that).
 2. Create the tables: `npx wrangler d1 migrations apply dot-scale --remote`. No terminal? Dashboard →
    **Storage & databases → D1 → dot-scale → Console**, paste `migrations/0001_init.sql`, run. Repeat for any later
    `migrations/000N_*.sql` (deploys do not run migrations).

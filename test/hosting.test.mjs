@@ -61,8 +61,13 @@ test('wrangler.jsonc: Worker + assets from the repo root; only /api/* runs the W
   assert.equal(cfg.assets.directory, './');
   assert.equal(cfg.main, 'worker/index.js');
   assert.deepEqual(cfg.assets.run_worker_first, ['/api/*'], 'static files must never invoke the Worker');
-  assert.equal(cfg.d1_databases[0].binding, 'DB');
-  assert.equal(cfg.d1_databases[0].migrations_dir, 'migrations');
+  // Sync is optional: the D1 block may be commented out (the Worker answers 503 "sync not set up"). If it is enabled it must be
+  // the right binding and must not still carry the placeholder id, which would make every deploy fail.
+  if (cfg.d1_databases) {
+    assert.equal(cfg.d1_databases[0].binding, 'DB');
+    assert.equal(cfg.d1_databases[0].migrations_dir, 'migrations');
+    assert.notEqual(cfg.d1_databases[0].database_id, 'REPLACE_WITH_D1_DATABASE_ID', 'D1 is enabled but the id is still the placeholder');
+  }
   assert.match(cfg.compatibility_date, /^\d{4}-\d{2}-\d{2}$/);
 });
 

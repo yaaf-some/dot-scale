@@ -12,16 +12,17 @@
     "run_worker_first": ["/api/*"]
   },
 
-  // D1 database for household sync. Create it once and paste its id here (docs/DEPLOY.md, "Household sync"):
-  //   npx wrangler d1 create dot-scale
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "dot-scale",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-      "migrations_dir": "migrations"
-    }
-  ],
+  // Household sync is OFF until you enable it, so the site deploys with no database. To turn it on (docs/DEPLOY.md, "Household sync"):
+  // create the D1 database, then uncomment the block below and paste its id. Enabled with the placeholder id, a deploy fails
+  // (test/hosting.test.mjs checks that).
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "dot-scale",
+  //     "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+  //     "migrations_dir": "migrations"
+  //   }
+  // ],
 
   // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
   "workers_dev": true
