@@ -344,7 +344,7 @@ function relevantHistory(brew, history, method) {
   return history
     .filter(
       (h) =>
-        h && !h.deleted && h !== brew &&
+        h && !h.deleted && !h.incomplete && h !== brew &&
         !(brew.id != null && h.id === brew.id) &&
         (h.method ?? method) === method &&
         (h.beanId ?? null) === (brew.beanId ?? null) &&
@@ -364,7 +364,7 @@ export function findDialledIn(brews, { method = 'espresso', rules = RULES } = {}
   const family = METHOD_FAMILY[method] ?? 'espresso';
   const c = { method, family, R: rules, gear: {}, bean: null, steps: null };
   let run = 0;
-  for (const b of brews || []) {
+  for (const b of (brews || []).filter((x) => !x?.incomplete)) { // an interrupted shot is neither a good shot nor a break in the run
     const good = isGoodShot(computeMetrics(b, { ...c, bean: null }), readTaste(b.taste), rules.espresso.dialIn);
     run = good ? run + 1 : 0;
     if (run >= rules.espresso.dialIn.consecutive) return b.id ?? true;
@@ -893,6 +893,10 @@ export function analyze(brew, ctx = {}) {
 
   m.dialledIn = family === 'espresso' && !!prev && isGoodShot(m, taste, R.espresso.dialIn) && isGoodShot(prev.m, readTaste(prev.brew.taste), R.espresso.dialIn);
 
+  if (brew.incomplete) { // a run that was cut short: show what ran, give no advice and never count it as dialled in
+    m.dialledIn = false;
+    return { metrics: roundMetrics(m), verdict: `Interrupted${m.timeS != null ? ` after ${fmtTime(m.timeS)}` : ''}: partial run, so no advice.`, tips: [], learn: [] };
+  }
   let tips = [];
   switch (family) {
     case 'espresso': tips = espressoTips(brew, m, taste, c, hist); break;
