@@ -44,6 +44,8 @@ test('_headers: security headers, Bluetooth stays allowed for the app, CSP is as
   for (const name of ['Strict-Transport-Security', 'X-Content-Type-Options: nosniff', 'Referrer-Policy', 'Content-Security-Policy', 'Permissions-Policy']) {
     assert.ok(h.includes(name), name);
   }
+  assert.match(h, /Strict-Transport-Security: max-age=31536000\s*$/m, 'HSTS: one year, no includeSubDomains, no preload');
+  assert.ok(!/includeSubDomains|preload/i.test(h.replace(/#.*$/gm, '')), 'no includeSubDomains/preload in the headers');
   assert.match(h, /bluetooth=\(self\)/);
   assert.match(h, /connect-src 'self'/);
   assert.match(h, /object-src 'none'/);

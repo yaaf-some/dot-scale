@@ -8,7 +8,7 @@
 #     (JS setting element.style.x = ... is allowed by CSP; only style="" in markup/innerHTML needs 'unsafe-inline'.)
 # test/hosting.test.mjs fails if the CSP would break the app, and shows a TODO when it can be tightened.
 /*
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin

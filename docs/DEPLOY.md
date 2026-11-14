@@ -46,6 +46,8 @@ After the first deploy, open the `dot-scale.<your-subdomain>.workers.dev` URL sh
 ```
 curl -sI https://dot-scale.<your-subdomain>.workers.dev/ | grep -i -E "strict|content-security|permissions|nosniff"
 curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/wrangler.jsonc   # must be 404
+curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/_headers          # must be 404 (config, not a file)
+curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/.assetsignore     # must be 404
 ```
 
 ## Try the integration branch on your phone (staging, before the cutover)
@@ -53,6 +55,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.work
 Workers Builds builds non-production branches as **preview versions** with their own URL, without touching production or your
 domain. This is how you try the new app on Cloudflare while Vercel still serves the old one.
 
+0. Leave non-production builds **off** unless you want staging. If you turn them on, set the allow-list below **first**.
 1. Dashboard → **Workers & Pages → dot-scale → Settings → Builds → Branch control**: turn builds for non-production branches
    **on** (non-production deploy command: `npx wrangler versions upload`, the default) and **restrict them to a short allow-list
    of branches you trust** (for example just the integration branch), not "all branches". This repository is public: a preview
@@ -90,7 +93,8 @@ Then do the real cutover in one sitting, at a quiet time, in this order:
 
 1. **Write down** the current record: Cloudflare dashboard → `yaafsome.fyi` → **DNS → Records** → the CNAME `coffee`
    (its target, a `vercel-dns.com` name, DNS only). You need it only if you roll back.
-2. **Delete** that CNAME. From this moment `coffee.yaafsome.fyi` is down until step 3 finishes
+2. **Delete** that CNAME. (If the dashboard offers to replace the existing record when you add the custom domain in step 3, that does
+   the same thing in one step and shortens the downtime; I couldn't test whether it does.) From this moment `coffee.yaafsome.fyi` is down until step 3 finishes
    (`dot-scale.vercel.app` keeps working).
 3. Dashboard → **Workers & Pages → dot-scale → Settings → Domains & Routes → Add → Custom domain** →
    `coffee.yaafsome.fyi` → Add. Cloudflare creates the DNS record and a certificate; this usually takes a minute or a few.
@@ -104,12 +108,13 @@ Only add it after step 2, otherwise the deploy fails on the DNS conflict.
 (DNS only). Vercel serves it again as long as the Vercel project still exists, so do the cleanup below only after a few
 days of everything working.
 
-### Browser data and the new address
+### Browser data and the address
 
-Browsers keep data **per address** (origin). If your devices already use `https://coffee.yaafsome.fyi`, the address
-doesn't change, so saved brews, settings and the home-screen icon carry over. Any device still using
-`https://dot-scale.vercel.app` has data there that will **not** appear at `coffee.yaafsome.fyi`: export it first (History
-→ export, where available) and import it at the new address, then re-add the home-screen icon there. The scale's
+Browsers keep data **per address** (origin). If your devices already use `https://coffee.yaafsome.fyi`, the address doesn't
+change, so saved brews and settings carry over (and a home-screen shortcut keeps working). Any device still using
+`https://dot-scale.vercel.app` has its data **there only**: it will not appear at `coffee.yaafsome.fyi`, and the current app has
+**no export yet**. Household sync (this PR) will carry data across devices later. If you only want to keep that history for now,
+keep using the old address until the release (so don't remove the Vercel project, see step 5, before then). The scale's
 Bluetooth permission is also per address; if the scale doesn't reconnect, press Connect and pick it again.
 
 ## 5. Clean up Vercel (after a few days of Cloudflare working)
@@ -147,7 +152,7 @@ Previews: a Workers Builds preview of another branch uses the **same D1 database
 
 ## Security headers (`_headers`)
 
-HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, frame blocking, COOP, a Permissions-Policy that
+HSTS (`max-age=31536000`, no `includeSubDomains`, no `preload`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, frame blocking, COOP, a Permissions-Policy that
 keeps **Bluetooth for the app itself** and turns off camera, microphone, geolocation, payment, USB, serial and HID, and a CSP:
 `default-src 'self'`, `connect-src 'self'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`.
 
