@@ -1,0 +1,13 @@
+{
+  "name": "dot-scale",
+  "private": true,
+  "type": "module",
+  "description": "Static web app for the Timemore Dot scale. No build step, no dependencies.",
+  "scripts": {
+    "serve": "node scripts/serve.mjs",
+    "test": "node --test test/*.test.mjs",
+    "smoke": "node test/smoke.cjs",
+    "check": "npm test && npm run smoke"
+  },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,93 @@
+// A fake Timemore Dot that speaks the REAL protocol: it parses the command frames the app writes and answers with
+// frames built by protocol.js, split into chunks to exercise the parser's reassembly.
+// Teach it here whenever you add a protocol feature (CLAUDE.md rule).
+//
+// Demo-only controls (not part of the real transport): setScenario(), place(g), remove(), startFlow(), dispense(g, gps),
+// stopFlow(), coupleTimer(bool). The Brew screen's demo panel drives every method through these (app/ui/brew/demo-panel.js).
+import { OP, CMD, TIMER, frame } from '../../protocol.js';
+
+const enc = (s) => [...new TextEncoder().encode(s)];
+
+// Flow (g/s) as a function of seconds since the pour started. Rough shapes, good enough to drive the UI.
+export const SCENARIOS = {
+  // bloom, two pours, drawdown (the old demo)
+  'pour-over': (t) => (t < 5 ? 6 : t < 35 ? 0.3 : t < 60 ? 4.5 : t < 75 ? 0.5 : t < 110 ? 3.8 : 0),
+  // EC260 on a 16 g dose: ~7 s to first drops, ~1.2 g/s main flow, tail-off after ~27 s
+  espresso: (t) => (t < 7 ? 0 : t < 9 ? 0.5 : t < 27 ? 1.25 : t < 30 ? 0.4 : 0.05),
+  // A 1:2 shot that lands on 32 g: ~7 s to first drops, ~1.7 g/s, pump off at ~27 s, a short drip, then quiet.
+  'espresso-1to2': (t) => (t < 7 ? 0 : t < 9 ? 0.5 : t < 27 ? 1.7 : t < 28.5 ? 0.35 : t < 30 ? 0.05 : 0),
+};
+
+export function createDemoTransport(onBytes, { tickMs = 100, scenario = 'pour-over' } = {}) {
+  const sim = { grams: 0, tareOffset: 0, timer: 0, running: false, pumping: false, ms: 0, flowMs: 0, scenario, prev: 0, queueG: 0, queueGps: 0, coupled: true };
+  const timeouts = new Set();
+  const later = (fn, ms) => { const id = setTimeout(() => { timeouts.delete(id); fn(); }, ms); timeouts.add(id); };
+
+  const emit = (op, cmd, payload) => {
+    const f = frame(op, cmd, payload);
+    f[f.length - 2] = 0; f[f.length - 1] = 0; // the real scale sends 00 00 instead of a CRC
+    onBytes(f.slice(0, 5)); onBytes(f.slice(5));
+  };
+
+  const tick = setInterval(() => {
+    if (sim.running) { sim.ms += tickMs; sim.timer = Math.floor(sim.ms / 1000); }
+    if (sim.pumping) {
+      sim.flowMs += tickMs;
+      const flow = (SCENARIOS[sim.scenario] ?? SCENARIOS['pour-over'])(sim.flowMs / 1000);
+      sim.grams += (flow * tickMs) / 1000 + (Math.random() - 0.5) * 0.04;
+    }
+    if (sim.queueG > 0) { // a measured pour (dispense), independent of the timer
+      const g = Math.min(sim.queueG, (sim.queueGps * tickMs) / 1000);
+      sim.queueG -= g;
+      sim.grams += g + (Math.random() - 0.5) * 0.04;
+    }
+    const net = sim.grams - sim.tareOffset;
+    const flow = ((net - sim.prev) * 1000) / tickMs;
+    sim.prev = net;
+    const w = Math.round(net * 10), f = Math.round(Math.max(0, flow) * 10);
+    emit(OP.NOTIFY, CMD.WEIGHT, [(w >>> 24) & 255, (w >>> 16) & 255, (w >>> 8) & 255, w & 255, (f >> 8) & 255, f & 255, (sim.timer >> 8) & 255, sim.timer & 255, 0]);
+  }, tickMs);
+
+  return {
+    kind: 'demo',
+    deviceName: 'DEMO DOT',
+    info: { model: 'Simulated TES017', maker: 'Dot Scale' },
+
+    /** Receives a command frame exactly as BLE would. */
+    async write(b) {
+      const op = b[2], cmd = b[3], p = b.slice(6, b.length - 2);
+      if (op === OP.WRITE) {
+        if (cmd === CMD.TARE) sim.tareOffset = sim.grams;
+        if (cmd === CMD.TIMER) {
+          if (p[0] === TIMER.START) { sim.running = true; if (sim.coupled) sim.pumping = true; }
+          if (p[0] === TIMER.PAUSE) { sim.running = false; if (sim.coupled) sim.pumping = false; }
+          if (p[0] === TIMER.RESET) { sim.running = false; if (sim.coupled) sim.pumping = false; sim.timer = 0; sim.ms = 0; if (sim.coupled) sim.flowMs = 0; }
+          later(() => emit(OP.NOTIFY, CMD.TIMER, [p[0]]), 50);
+        }
+        later(() => emit(OP.WRITE, cmd, [1]), 30);
+      } else if (op === OP.READ) {
+        if (cmd === CMD.BATTERY) later(() => emit(OP.READ, CMD.BATTERY, [3, 78]), 30);
+        if (cmd === CMD.FIRMWARE) later(() => emit(OP.READ, CMD.FIRMWARE, enc('v1.0.4')), 30);
+        if (cmd === CMD.NAME) later(() => emit(OP.READ, CMD.NAME, enc('DEMO DOT')), 30);
+      }
+    },
+
+    async readInfo() { return this.info; },
+    disconnect() { clearInterval(tick); for (const id of timeouts) clearTimeout(id); timeouts.clear(); },
+
+    // ---- demo-only ----
+    setScenario(name) { if (SCENARIOS[name]) sim.scenario = name; },
+    /** Put something on the scale (beans, portafilter, cup): a sudden weight step, no flow. */
+    place(g) { sim.grams += g; },
+    remove() { sim.grams = sim.tareOffset; sim.queueG = 0; sim.pumping = false; }, // also ends any pour in progress
+    /** Start the flow without the scale timer, like pressing the pump: lets auto-start logic be tested. */
+    startFlow() { sim.pumping = true; sim.flowMs = 0; },
+    /** Stop the scenario flow (pump off). */
+    stopFlow() { sim.pumping = false; },
+    /** Pour `g` grams at `gps` g/s, like a kettle. Independent of the timer and of the scenarios. */
+    dispense(g, gps = 5) { if (g > 0) { sim.queueG += g; sim.queueGps = Math.max(0.1, gps); } },
+    /** true (default): the scale timer starts/stops the scenario flow, as in the old demo. The Brew flow turns this off. */
+    coupleTimer(on) { sim.coupled = !!on; },
+    get sim() { return sim; },
+  };
+}

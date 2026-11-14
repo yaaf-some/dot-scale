@@ -4,6 +4,8 @@ A self-hosted web app for the **Timemore Dot (TES017)** Bluetooth coffee scale, 
 The scale's firmware is left as it is. The app talks to it directly over Web Bluetooth using
 [Timemore's published protocol](https://github.com/TIMEMORE-COFFEE/open-scale-protocol).
 
+> Unofficial hobby project. It is not made by or affiliated with Timemore; "Timemore" and "Dot" belong to their owners.
+
 ## Hosting
 
 The app is plain static files with no build step. It's hosted on **Vercel** at **https://dot-scale.vercel.app**, which redeploys on every push to `main`.
@@ -12,9 +14,11 @@ Bluetooth runs between the scale and whatever device has the page open, so no co
 
 ## Run it locally
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scale\serve.ps1 -Open
+```bash
+npm run serve
 ```
+
+Needs Node 18+.
 
 Then open http://localhost:8737 in **Chrome or Edge** and click **Connect scale**. You can install it as an app
 from the address bar.
@@ -23,7 +27,7 @@ Web Bluetooth only works on `localhost` or `https://`.
 
 ### Optional: tailnet-only hosting
 
-On any always-on machine running `serve.ps1` (or any static server on port 8737),
+On any always-on machine running `npm run serve` (or any static server on port 8737),
 `tailscale serve --bg 8737` publishes it over HTTPS at `https://<machine>.<tailnet>.ts.net/`, visible only on your tailnet.
 
 ## What it does
@@ -43,8 +47,10 @@ On any always-on machine running `serve.ps1` (or any static server on port 8737)
 | File | What it is |
 |---|---|
 | `protocol.js` | Frame builder, CRC-16/MODBUS, streaming parser. Command bytes match frames verified on real hardware. |
-| `index.html` | The app UI |
-| `serve.ps1` | Small local web server (no dependencies) |
+| `index.html` | Thin app shell |
+| `app/` | The app: `core/` (store, scale, demo), `ui/` (tokens, components, views). See `CLAUDE.md` |
+| `scripts/serve.mjs` | Local dev server (`npm run serve`) |
+| `test/` | Protocol unit tests (`npm test`) and a Demo-mode browser smoke test (`npm run smoke`) |
 
 ## Protocol notes
 

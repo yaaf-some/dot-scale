@@ -1,15 +1,35 @@
-// Cloudflare Worker with static assets: serves the app (the repo root, no build step) at the edge.
-// There is no Worker code yet; this is an assets-only Worker. Private files are excluded by .assetsignore,
-// security headers come from _headers. See docs/DEPLOY.md for the owner steps.
+// Cloudflare Worker + static assets for Dot Scale. No build step: wrangler bundles worker/index.js itself and
+// uploads the repo root as static assets (everything private is excluded by .assetsignore).
 {
   "name": "dot-scale",
+  "main": "worker/index.js",
   "compatibility_date": "2026-11-01",
+
+  // Serve the app from the repo root; only /api/* runs the Worker first (static files never invoke it).
   "assets": {
-    "directory": "./"
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   },
 
+  // Household sync is OFF until you enable it, so the site deploys with no database. To turn it on (docs/DEPLOY.md, "Household sync"):
+  // create the D1 database, then uncomment the block below and paste its id. Enabled with the placeholder id, a deploy fails
+  // (test/hosting.test.mjs checks that).
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "dot-scale",
+  //     "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+  //     "migrations_dir": "migrations"
+  //   }
+  // ],
+
   // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
-  "workers_dev": true
+  "workers_dev": true,
+
+  // Workers Builds builds every non-production branch with `wrangler preview`, which refuses to run without this block.
+  // An empty block is enough; production deploys (`wrangler deploy` on main) ignore it.
+  "previews": {}
 
   // Custom domain: add coffee.yaafsome.fyi in the dashboard AFTER removing the old Vercel CNAME (docs/DEPLOY.md, step 4).
   // To pin it in this file instead, add (only once that DNS record is gone, or the deploy fails):
