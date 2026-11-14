@@ -145,14 +145,13 @@ test('groupByBean groups by bean and method, most recent first, oldest shot firs
 });
 
 test('interrupted brews are not trend points: not in the trail, not dialled in, and they get no advice', async () => {
-  const { buildTrail, isIncomplete } = await import('../app/journal/history.js');
+  const { buildTrail } = await import('../app/journal/history.js');
   const { analyze, findDialledIn } = await import('../app/insights/analyze.js');
   const weight = Array.from({ length: 280 }, (_, i) => Math.min(32, Math.max(0, (i - 70) * 0.17)));
   const flow = weight.map((w, i) => (i > 70 && w < 32 ? 1.7 : 0));
   const good = (id, t) => ({ type: 'brew', id, method: 'espresso', profileId: 'p', beanId: 'b', startedAt: t, dose: 16, yield: 32, targetYield: 32, ratio: 2, timeS: 28, grind: { value: 10 }, taste: { balance: 0, strength: 0, stars: 5 }, samples: { hz: 10, t0: 0, channels: { weight, flow } } });
   const a = good('a', 1000), b = good('b', 3000);
   const cut = { ...good('cut', 2000), incomplete: true, yield: 7, timeS: 5, taste: undefined };
-  assert.equal(isIncomplete(cut), true);
   // the interrupted shot sits between two good ones: it must not break the run of two (nor be one itself)
   assert.equal(findDialledIn([a, cut, b]), 'b');
   const trail = buildTrail([a, cut, b], { method: 'espresso' });
@@ -163,6 +162,6 @@ test('interrupted brews are not trend points: not in the trail, not dialled in, 
   assert.match(r.verdict, /^Interrupted/);
   assert.deepEqual(r.tips, []);
   assert.equal(r.metrics.dialledIn, false);
-  const next = analyze({ ...good('n', 4000), grind: { value: 8 } }, { method: 'espresso', history: [a, cut] });
-  assert.ok(next.verdict, 'analysis of a later shot ignores the interrupted one');
+  const later = { ...good('n', 4000), grind: { value: 8 } };
+  assert.deepEqual(analyze(later, { method: 'espresso', history: [a, cut] }), analyze(later, { method: 'espresso', history: [a] }), 'a later shot is judged as if the interrupted one never happened');
 });

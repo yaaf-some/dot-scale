@@ -114,9 +114,6 @@ export function sparkPath(brew, { w = 72, h = 24, pad = 2, max = 40 } = {}) {
 }
 
 // ---------- dial-in trail ----------------------------------------------------------------------
-/** A brew that was interrupted before it finished (saved by the Brew flow so nothing is lost). */
-export const isIncomplete = (b) => !!b?.incomplete;
-
 /** How the grind changed between two shots. Convention follows the insights engine: a lower number is finer unless gear.grinderFinerIsHigher. */
 export function grindChange(prev, cur, finerIsHigher = false) {
   const a = prev?.grind, b = cur?.grind;

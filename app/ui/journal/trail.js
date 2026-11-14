@@ -58,7 +58,7 @@ export async function mount(root, ctx, beanId) {
   // Whose shots: the owner named in the link (so a brew opened from "Everyone" shows its own trail), else the active profile.
   const profile = (ctx.query.profile && ctx.profiles.find((p) => p.id === ctx.query.profile)) || ctx.profile;
   const back = h('a', { class: 'back', href: '#/journal' }, icon('back', { size: 20 }), 'Journal');
-  const mine = brews.filter((b) => b.beanId === beanId && (!profile || b.profileId === profile.id));
+  const mine = brews.filter((b) => !b.incomplete && b.beanId === beanId && (!profile || b.profileId === profile.id));
   if (!bean || !mine.length) {
     append(root, [back, h('div', { class: 'empty' }, h('h2', {}, bean ? `No brews on ${bean.name} yet` : 'Beans not found'),
       h('p', {}, bean ? `${profile?.name ?? 'You'} haven’t brewed these beans yet. Once there are a few shots, their trail shows up here.` : 'These beans may have been removed.'),

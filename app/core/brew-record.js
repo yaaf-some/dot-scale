@@ -59,7 +59,7 @@ export function startingRecipe({ method, profile, recipes = [], brews = [], reci
   const mine = (r) => live(r) && (!profile || r.profileId === profile.id) && r.method === method;
   let recipe = null, source = 'default', usedRecipeId = null;
   const rec = recipeId && recipes.find((r) => live(r) && r.id === recipeId && r.method === method);
-  const past = brewId && brews.find((b) => live(b) && b.id === brewId && b.method === method);
+  const past = brewId && brews.find((b) => live(b) && !b.incomplete && b.id === brewId && b.method === method);
   if (rec) { recipe = recipeFromRecord(rec); source = 'recipe'; usedRecipeId = rec.id; }
   else if (past) { recipe = recipeFromBrew(past); source = 'brew'; usedRecipeId = past.recipeId ?? null; }
   else {

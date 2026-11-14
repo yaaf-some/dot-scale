@@ -878,6 +878,10 @@ export function analyze(brew, ctx = {}) {
   };
   const m = computeMetrics(brew, c);
   const taste = readTaste(brew.taste);
+  if (brew.incomplete) { // a run that was cut short: show what ran, give no advice and never count it as dialled in
+    m.dialledIn = false;
+    return { metrics: roundMetrics(m), verdict: `Interrupted${m.timeS != null ? ` after ${fmtTime(m.timeS)}` : ''}: partial run, so no advice.`, tips: [], learn: [] };
+  }
 
   // History for this bean: previous shot, grind change between them, and recent statuses.
   const list = relevantHistory(brew, ctx.history, method).map((h) => {
@@ -893,10 +897,6 @@ export function analyze(brew, ctx = {}) {
 
   m.dialledIn = family === 'espresso' && !!prev && isGoodShot(m, taste, R.espresso.dialIn) && isGoodShot(prev.m, readTaste(prev.brew.taste), R.espresso.dialIn);
 
-  if (brew.incomplete) { // a run that was cut short: show what ran, give no advice and never count it as dialled in
-    m.dialledIn = false;
-    return { metrics: roundMetrics(m), verdict: `Interrupted${m.timeS != null ? ` after ${fmtTime(m.timeS)}` : ''}: partial run, so no advice.`, tips: [], learn: [] };
-  }
   let tips = [];
   switch (family) {
     case 'espresso': tips = espressoTips(brew, m, taste, c, hist); break;
