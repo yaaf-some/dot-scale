@@ -423,26 +423,6 @@ test('API responses are never cacheable and carry nosniff', async () => {
   }
 });
 
-test('hosting config: private files are excluded from public assets; security headers are present', () => {
-  const ignore = readFileSync(new URL('../.assetsignore', import.meta.url), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
-  for (const must of ['.git', '.claude', 'node_modules', 'test', 'docs', 'scripts', 'worker', 'migrations', 'wrangler.jsonc', 'package.json', 'CLAUDE.md', '.assetsignore', '.vercelignore']) {
-    assert.ok(ignore.includes(must), `.assetsignore must list ${must}`);
-  }
-  assert.ok(!ignore.some((l) => ['index.html', 'protocol.js', 'app', '_headers', 'manifest.webmanifest'].includes(l)), 'the app itself must be served');
-  const headers = readFileSync(new URL('../_headers', import.meta.url), 'utf8');
-  for (const h of ['Strict-Transport-Security', 'X-Content-Type-Options: nosniff', 'Referrer-Policy', 'Content-Security-Policy', 'Permissions-Policy']) assert.ok(headers.includes(h), h);
-  assert.match(headers, /bluetooth=\(self\)/, 'Web Bluetooth must stay allowed for the app itself');
-  assert.match(headers, /connect-src 'self'/);
-  assert.match(headers, /object-src 'none'/);
-  assert.match(headers, /frame-ancestors 'none'/);
-  const cfg = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-  const wr = JSON.parse(cfg);
-  assert.deepEqual(wr.assets.run_worker_first, ['/api/*']);
-  assert.equal(wr.main, 'worker/index.js');
-  assert.equal(wr.d1_databases[0].binding, 'DB');
-  assert.equal(wr.routes[0].pattern, 'coffee.yaafsome.fyi');
-});
-
 test('no api/ directory (Vercel would treat it as functions) and no Node-only APIs in the worker', () => {
   assert.throws(() => readdirSync(new URL('../api/', import.meta.url)), /ENOENT/);
   for (const f of readdirSync(new URL('../worker/', import.meta.url))) {

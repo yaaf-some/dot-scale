@@ -2,6 +2,8 @@
 
 Static web app for the Timemore Dot (TES017) Bluetooth scale. No build step, no dependencies.
 Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deploys to production**.
+Moving to Cloudflare (Worker + static assets, https://coffee.yaafsome.fyi): config is in `wrangler.jsonc`, `_headers` and
+`.assetsignore`; owner steps and the cutover are in `docs/DEPLOY.md`. The API is a Cloudflare Worker in `worker/`; don't add an `api/` folder (Vercel would treat it as functions).
 
 ## Read first
 - **`docs/PRODUCT.md`** is the product spec and the contracts between modules (data model, insights, sync). Follow it;
@@ -18,11 +20,11 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737).
 - `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
 - `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
-- `.vercelignore` keeps tests/scripts out of the Vercel deployment (and `worker/`, `migrations/`, `wrangler.jsonc`, `_headers`).
+- `.vercelignore` keeps tests/scripts (and the Cloudflare-only files) out of the Vercel deployment.
 - `worker/` — Cloudflare Worker (household sync API); `worker/storage.js` is the only file that touches the database (D1).
-  `migrations/` is the D1 schema, `wrangler.jsonc` the Worker config, `_headers` the security headers, `.assetsignore` what is
-  never served publicly. Hosting and sync docs: `docs/DEPLOY.md`, `docs/SYNC.md`. No `api/` folder: Vercel would treat it as functions.
+  `migrations/` is the D1 schema. Sync docs: `docs/SYNC.md`; owner steps: `docs/DEPLOY.md`.
 - `app/sync/client.js` — household sync client (needs the store contract in `docs/SYNC.md`).
+- `.assetsignore` is the same idea for Cloudflare: anything not listed there is **publicly served**, so add new private files to it.
 
 ## Commands
 - `npm test` — unit tests (Node 22.13+: the sync tests use the built-in `node:sqlite`)

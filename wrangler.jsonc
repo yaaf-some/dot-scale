@@ -12,7 +12,7 @@
     "run_worker_first": ["/api/*"]
   },
 
-  // D1 database for household sync. Create it once and paste its id here (see docs/DEPLOY.md):
+  // D1 database for household sync. Create it once and paste its id here (docs/DEPLOY.md, "Household sync"):
   //   npx wrangler d1 create dot-scale
   "d1_databases": [
     {
@@ -23,10 +23,10 @@
     }
   ],
 
-  // Custom domain (the yaafsome.fyi zone is already on Cloudflare). Wrangler creates the DNS record and certificate.
-  "routes": [{ "pattern": "coffee.yaafsome.fyi", "custom_domain": true }],
+  // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
+  "workers_dev": true
 
-  // The *.workers.dev URL stays on, handy for testing before the cutover; turn it off later if you like.
-  "workers_dev": true,
-  "observability": { "enabled": false }
+  // Custom domain: add coffee.yaafsome.fyi in the dashboard AFTER removing the old Vercel CNAME (docs/DEPLOY.md, step 4).
+  // To pin it in this file instead, add (only once that DNS record is gone, or the deploy fails):
+  //   "routes": [{ "pattern": "coffee.yaafsome.fyi", "custom_domain": true }]
 }

@@ -1,5 +1,6 @@
 # Files in the repo root that must never be served publicly by Workers static assets (the app is uploaded from "./").
-# Patterns follow .gitignore syntax. The app itself (index.html, protocol.js, app/, icons, manifest, _headers) is served.
+# Patterns follow .gitignore syntax. The app itself (index.html, protocol.js, app/, icons, manifest) is served;
+# _headers is read by Cloudflare as configuration.
 .git
 .gitignore
 .github
