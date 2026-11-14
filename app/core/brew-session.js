@@ -107,8 +107,8 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
   const targetYield = rcp.yield;
   const lastPourIdx = steps.reduce((acc, st, i) => (Number.isFinite(st.targetG) ? i : acc), -1);
   const planEndS = steps.length ? Math.max(...steps.map((st) => st.atS + (st.durationS || 0))) : 0;
-  const learnedLead = kind === 'espresso' ? suggestEarlyStopG(history, { portafilter: rcp.portafilter }) : null;
-  const stopLeadG = settings.stopLeadG ?? learnedLead ?? cfg.defaultStopLeadG;
+  const learnedLead = kind === 'espresso' ? suggestEarlyStopG(history, { portafilter: rcp.portafilter, profileId: settings.profileId }) : null;
+  const stopLead = () => opt.stopLeadG ?? learnedLead ?? cfg.defaultStopLeadG;
 
   let ev = [], cues = [], cmds = [];
   let s;
@@ -126,9 +126,9 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
   }
   s = fresh();
 
-  const emit = (type, data) => ev.push({ type, t: s.t, ...data });
-  const cue = (id, text, data) => cues.push({ id, text, t: s.t, ...data });
-  const cmd = (c, data) => cmds.push({ cmd: c, t: s.t, ...data });
+  const emit = (type, data) => ev.push({ type, t: s.t ?? 0, ...data });
+  const cue = (id, text, data) => cues.push({ id, text, t: s.t ?? 0, ...data });
+  const cmd = (c, data) => cmds.push({ cmd: c, t: s.t ?? 0, ...data });
   const setPhase = (to) => { const from = s.phase; if (from !== to) { s.phase = to; emit('phase', { from, to }); } };
 
   // ---------- signal helpers ----------
@@ -157,7 +157,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     if (s.t != null && t <= s.t) return false;
     const prevG = s.t != null ? s.g : null;
     const prevT = s.t;
-    if (prevT != null && t - prevT > cfg.gapS) { s.win.length = 0; s.stableSince = null; s.runStart = null; s.quietSince = null; }
+    if (prevT != null && t - prevT > cfg.gapS) { s.win.length = 0; s.stableSince = null; s.runStart = null; s.quietSince = null; Object.assign(s.esp, { flowRun: null, mainRun: null, flowHist: [] }); }
     s.t = t; s.g = grams;
     s.win.push({ t, g: grams, f: 0 });
     while (s.win.length && s.win[0].t < t - 2.5) s.win.shift();
@@ -168,7 +168,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     s.flSlow = slow ?? fallback;
     s.win[s.win.length - 1].f = s.fl;
     // sudden jump: a knock, a cup set down, a hand on the scale
-    if (prevG != null && prevT != null && Math.abs(grams - prevG) >= cfg.bumpJumpG && t - prevT <= 0.5 && (s.phase === 'ready' || s.phase === 'prep')) {
+    if (prevG != null && prevT != null && Math.abs(grams - prevG) >= cfg.bumpJumpG && Math.abs(grams - prevG) / (t - prevT) >= cfg.maxFlowGps && t - prevT <= 0.5 && (s.phase === 'ready' || s.phase === 'prep')) {
       s.disturbUntil = t + cfg.disturbS; s.hadDisturbance = true; s.runStart = null;
       if (s.phase === 'ready') emit('disturbance', { deltaG: round(grams - prevG, 1) });
     }
@@ -183,6 +183,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     // quiet (flow ~ 0) tracking
     if (Math.abs(s.flSlow) <= cfg.quietFlowGps) s.quietSince ??= t; else s.quietSince = null;
     if (s.phase === 'ready' || s.phase === 'running') s.raw.push({ t, g: grams, f: s.fl });
+    if (s.phase === 'ready') while (s.raw.length > 2 && s.raw[1].t < t - 3) s.raw.shift(); // only a short pre-roll is needed before the timer starts
     return true;
   }
 
@@ -212,7 +213,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     s.restG = s.g; s.runStart = null; s.hadDisturbance = false; s.retares = 0;
     s.raw = s.win.map((w) => ({ ...w }));
     setPhase('ready');
-    emit('tared', { grams: round(s.g, 1) });
+    if (!m.captures?.includes('water')) emit('tared', { grams: round(s.g, 1) }); // moka already reported its tare
     cmd('timer:reset');
   }
   function afterTare() {
@@ -294,7 +295,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     const el = s.t - s.startT;
     const maxS = kind === 'espresso' ? cfg.espressoMaxS : planEndS + cfg.planOverrunS;
     if (el > maxS) { finish('timeout'); return; }
-    if (kind === 'espresso') tickEspresso(el); else tickSteps(el);
+    if (kind === 'espresso') tickEspresso(); else tickSteps(el);
   }
 
   function tickEspresso() {
@@ -317,11 +318,11 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     if (e.phase === 'waiting') return;
 
     // stop-the-pump cue, a little before the target so the drip after stopping lands on it
-    if (!e.stopCue && s.g >= targetYield - stopLeadG) {
+    if (!e.stopCue && s.g >= targetYield - stopLead()) {
       e.stopCue = true;
       e.phase = 'finishing';
       emit('espresso:phase', { phase: 'finishing' });
-      cue('espresso:stop', 'Stop the pump', { grams: round(s.g, 1), targetG: targetYield, leadG: stopLeadG });
+      cue('espresso:stop', 'Stop the pump', { grams: round(s.g, 1), targetG: targetYield, leadG: stopLead() });
     }
 
     // pump stop = flow collapsing from its recent peak (the 0.6 s slope lags, so back-date a little)
@@ -332,9 +333,10 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
       // the flow decays, so the pump stopped when it left its peak, not when it fell below the ratio: walk back to that point
       let h = e.flowHist.length - 1;
       while (h > 0 && e.flowHist[h].f < 0.85 * peak) h--;
+      e.pumpOffPeak = peak;
       e.pumpOffT = e.flowHist[h].t - cfg.slopeLagS;
       e.pumpOffG = gramsAt(e.pumpOffT);
-    } else if (e.pumpOffT != null && s.fl >= cfg.mainFlowGps) { e.pumpOffT = null; e.pumpOffG = null; }
+    } else if (e.pumpOffT != null && s.fl >= 0.7 * (e.pumpOffPeak ?? cfg.mainFlowGps)) { e.pumpOffT = null; e.pumpOffG = null; }
 
     const quiet = s.quietSince != null ? s.t - s.quietSince : 0;
     const near = s.g >= targetYield - cfg.nearTargetG;
@@ -409,7 +411,6 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
   }
   function dispatch(e) {
     const t = e.t ?? s.t ?? 0;
-    if (s.t == null) s.t = t;
     switch (e.type) {
       case 'begin':
         if (s.phase === 'idle') { setPhase('prep'); s.prepStep = 'dose'; }
@@ -441,7 +442,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
         break;
       }
       case 'tare': // the user tared the scale (from the app or the scale itself)
-        if (s.phase === 'prep' && s.prepStep === 'cup') { s.tare = { t: s.t, tries: 0, reason: 'user' }; s.prepStep = 'taring'; } else if (s.phase === 'ready') {
+        if (s.phase === 'prep' && s.prepStep === 'cup') { s.tare = { t: s.t, tries: 0, reason: 'user' }; s.prepStep = 'taring'; } else if (s.phase === 'ready' && kind !== 'moka') {
           s.tare = { t: s.t, tries: 0, reason: 'user' };
         }
         break;
@@ -517,7 +518,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
       doseG: s.doseG, waterG: s.waterG, targetYield, tareG: null,
       startT: s.startT, startSource: s.startSource, elapsedS: round(el, 1),
       progress: kind === 'moka' ? 0 : progress,
-      espresso: kind === 'espresso' ? { phase: e.phase, firstDropS: e.firstDropS, stopLeadG, learnedLeadG: learnedLead, stopCueSent: e.stopCue, stopAtG: round(targetYield - stopLeadG, 1) } : null,
+      espresso: kind === 'espresso' ? { phase: e.phase, firstDropS: e.firstDropS, stopLeadG: stopLead(), learnedLeadG: learnedLead, stopCueSent: e.stopCue, stopAtG: round(targetYield - stopLead(), 1) } : null,
       brew: brewState(),
       done: s.done,
       settings: { ...opt },
@@ -551,7 +552,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     };
     if (kind === 'espresso') {
       if (s.esp.firstDropS != null) out.firstDropS = s.esp.firstDropS;
-      out.stopLeadG = stopLeadG;
+      out.stopLeadG = stopLead();
       if (s.esp.pumpOffT != null && s.done) {
         out.stopS = round(s.esp.pumpOffT - s.startT, 1);
         out.dripAfterStopG = round(Math.max(0, yld - s.esp.pumpOffG), 1);
