@@ -529,7 +529,12 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     return out;
   }
 
-  /** The finished brew as Brew-record fields (docs/PRODUCT.md §6), ready for analyze() and the store. Null before the timer ran. */
+  /**
+   * The finished brew as Brew-record fields (docs/PRODUCT.md §6), ready for analyze() and the store. Null before the timer ran.
+   * Espresso timing: `startSource: 'manual'` means the timer ran from pump start, so `timeS` includes the pump-to-first-drop lag
+   * and `firstDropS` is set. `startSource: 'auto'` means the timer began at the first drops (the scale cannot see the pump), so
+   * `timeS` excludes that lag and `firstDropS` is absent. Analysis must use `startSource` to tell the two apart.
+   */
   function record() {
     if (s.startT == null) return null;
     const endT = s.done ? s.done.t : s.t;
