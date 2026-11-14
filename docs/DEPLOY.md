@@ -32,9 +32,16 @@ Production branch: `main` (so real Cloudflare deploys start when the release PR 
 
 ## 3. Test on the workers.dev address first
 
-After the first deploy, open the `dot-scale.<your-subdomain>.workers.dev` URL shown on the Worker's page in Chrome (or
-Bluefy on iPhone/iPad), press **Demo**, and check the app works. Vercel is still serving `coffee.yaafsome.fyi`, so nothing
-is at risk. Check the security headers and that private files are not served:
+After the first deploy, open the `dot-scale.<your-subdomain>.workers.dev` URL shown on the Worker's page. Vercel is still serving
+`coffee.yaafsome.fyi`, so nothing is at risk. **Do not cut over until all of these pass:**
+
+1. In Chrome: press **Demo** and check the app works.
+2. **On the iPhone/iPad in Bluefy: press Connect and connect the real scale**, then tare. Demo mode does not use Web Bluetooth,
+   and Bluefy (WebKit) was not tested here, so this is the real check that the security headers don't get in the way.
+3. If Connect fails only on this address, loosen the headers one at a time in `_headers` (first remove the
+   `Permissions-Policy` line, then `Cross-Origin-Opener-Policy`, then try without the CSP) and push; the change deploys in a
+   minute. Tell Claude which one it was so the file can be fixed properly.
+4. Check the security headers and that private files are not served:
 
 ```
 curl -sI https://dot-scale.<your-subdomain>.workers.dev/ | grep -i -E "strict|content-security|permissions|nosniff"
@@ -46,9 +53,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.work
 Workers Builds builds non-production branches as **preview versions** with their own URL, without touching production or your
 domain. This is how you try the new app on Cloudflare while Vercel still serves the old one.
 
-1. Dashboard → **Workers & Pages → dot-scale → Settings → Builds → Branch control**: make sure builds for non-production
-   branches are **on** (non-production deploy command: `npx wrangler versions upload`, the default). In a public repo, you can
-   limit them to the branches you trust (for example `claude/*`).
+1. Dashboard → **Workers & Pages → dot-scale → Settings → Builds → Branch control**: turn builds for non-production branches
+   **on** (non-production deploy command: `npx wrangler versions upload`, the default) and **restrict them to a short allow-list
+   of branches you trust** (for example just the integration branch), not "all branches". This repository is public: a preview
+   build runs that branch's code on your Cloudflare account with the same bindings as production (including the D1 database once
+   it exists). As far as I know, only branches pushed to this repository are built (not pull requests from forks); check that
+   setting in the dashboard.
 2. **Settings → Domains & Routes**: make sure **Preview URLs** are enabled.
 3. Push to (or re-run a build of) the integration branch `claude/admiring-brahmagupta-2rovr3`. When the build finishes, the
    preview URL is on the build's page and under the Worker's **Deployments / Versions**. A branch gets a stable alias of the
@@ -67,8 +77,16 @@ set it back to `main` when the release PR merges.
 
 ## 4. Cutover: move coffee.yaafsome.fyi from Vercel to Cloudflare
 
-Cloudflare's Worker custom domain creates its **own** DNS record for the name, so the old Vercel CNAME has to go first or
-it conflicts (the attach fails with a message about existing DNS records). Do these in one sitting, in this order:
+Cloudflare's Worker custom domain creates its **own** DNS record for the name, so the old Vercel CNAME has to go first or it
+conflicts (the attach fails with a message about existing DNS records). That means **`coffee.yaafsome.fyi` is down between steps
+2 and 3** (a few minutes if all goes well; `dot-scale.vercel.app` keeps working). The custom-domain attach and certificate flow
+is untested here, so rehearse it first on a throwaway name that has no DNS record yet:
+
+**Rehearsal (recommended):** add the custom domain `coffee-test.yaafsome.fyi` to the Worker (**Settings → Domains & Routes → Add →
+Custom domain**), wait for it to become active, run the header and 404 checks from step 3 against it and press Connect in
+Bluefy, then remove that domain again. If the attach or the certificate misbehaves, you learn it without any downtime.
+
+Then do the real cutover in one sitting, at a quiet time, in this order:
 
 1. **Write down** the current record: Cloudflare dashboard → `yaafsome.fyi` → **DNS → Records** → the CNAME `coffee`
    (its target, a `vercel-dns.com` name, DNS only). You need it only if you roll back.

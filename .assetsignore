@@ -1,25 +1,41 @@
-# Files in the repo root that must never be served publicly by Workers static assets (the app is uploaded from "./").
-# Patterns follow .gitignore syntax. The app itself (index.html, protocol.js, app/, icons, manifest) is served;
-# _headers is read by Cloudflare as configuration.
+# Everything in the repo root is uploaded as the public site EXCEPT what is listed here (the app is served from "./").
+# Patterns follow .gitignore syntax. Only tracked files ever ship (Workers Builds deploys from git), but ANYTHING committed
+# at the top level that is not listed here is PUBLIC. When you add a new private top-level file or folder, add it here.
+# Served on purpose: index.html, protocol.js, app/, sw.js, icons/, manifest.webmanifest, icon.svg. `_headers` is read by
+# Cloudflare as configuration, not served.
+
+# Unanchored: never ship these from ANY folder.
 .git
-.gitignore
-.github
-.claude
-.vercelignore
-.assetsignore
+.DS_Store
+node_modules
+.wrangler
 .env*
 .dev.vars*
-.wrangler
-node_modules
-package.json
-package-lock.json
-wrangler.jsonc
-wrangler.toml
-worker
-migrations
-test
-docs
-scripts
-CLAUDE.md
-README.md
-*.ps1
+*.log
+
+# Anchored with a leading "/": repo root only, so app/docs/ or app/test/ (future modules) are NOT hidden by accident.
+/.gitignore
+/.github
+/.claude
+/.vscode
+/.idea
+/.mcp.json
+/.npmrc
+/.nvmrc
+/.vercelignore
+/.assetsignore
+/package.json
+/package-lock.json
+/wrangler.jsonc
+/wrangler.toml
+/worker
+/migrations
+/test
+/docs
+/scripts
+/coverage
+/playwright-report
+/test-results
+/CLAUDE.md
+/README.md
+/*.ps1

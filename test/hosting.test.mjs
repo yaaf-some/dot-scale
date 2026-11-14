@@ -3,20 +3,40 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 const lines = (f) => read(f).split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
 
+// `.assetsignore` uses gitignore syntax: "/docs" ignores only the root folder, "docs" would also hide app/docs/.
+const ignored = (name) => lines('.assetsignore').some((l) => l === name || l === `/${name}`);
+const ignoredAtRootOnly = (name) => lines('.assetsignore').includes(`/${name}`);
+
 test('.assetsignore keeps private files out of the public site, and not the app itself', () => {
-  const ignore = lines('.assetsignore');
   for (const must of ['.git', '.claude', '.env*', 'node_modules', 'test', 'docs', 'scripts', 'worker', 'migrations',
-    'wrangler.jsonc', 'package.json', 'CLAUDE.md', '.assetsignore', '.vercelignore']) {
-    assert.ok(ignore.includes(must), `.assetsignore must list ${must}`);
+    'wrangler.jsonc', 'package.json', 'CLAUDE.md', '.assetsignore', '.vercelignore', '.github']) {
+    assert.ok(ignored(must), `.assetsignore must list ${must}`);
   }
-  for (const pub of ['index.html', 'protocol.js', 'app', 'manifest.webmanifest', 'icon.svg']) {
-    assert.ok(!ignore.includes(pub), `${pub} is part of the app and must be served`);
+  for (const pub of ['index.html', 'protocol.js', 'app', 'sw.js', 'icons', 'manifest.webmanifest', 'icon.svg']) {
+    assert.ok(!ignored(pub), `${pub} is part of the app and must be served`);
   }
+  // Root-only folders must be anchored so app/docs/, app/test/, app/scripts/ (future modules) are still served.
+  for (const dir of ['test', 'docs', 'scripts', 'worker', 'migrations']) assert.ok(ignoredAtRootOnly(dir), `anchor it as /${dir}`);
+});
+
+// Workers Builds deploys from git, so only TRACKED files can ever be published. Every tracked top-level entry must be a
+// conscious choice: public on purpose (listed here) or ignored. A new file/folder at the top level fails this until someone
+// decides; add public ones to PUBLIC below, private ones to .assetsignore.
+const PUBLIC = new Set(['index.html', 'protocol.js', 'app', 'sw.js', 'icons', 'manifest.webmanifest', 'icon.svg', '_headers']);
+test('every tracked top-level file or folder is either public on purpose or listed in .assetsignore', () => {
+  const top = [...new Set(execFileSync('git', ['ls-files'], { encoding: 'utf8', cwd: new URL('../', import.meta.url) })
+    .split('\n').filter(Boolean).map((f) => f.split('/')[0]))];
+  const globToRe = (g) => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+  const patterns = lines('.assetsignore').map((l) => globToRe(l.replace(/^\//, '')));
+  const unaccounted = top.filter((n) => !PUBLIC.has(n) && !patterns.some((re) => re.test(n)));
+  assert.deepEqual(unaccounted, [], `these top-level entries would be PUBLISHED on Cloudflare: ${unaccounted.join(', ')}. ` +
+    'Add private ones to .assetsignore, or add public ones to PUBLIC in test/hosting.test.mjs.');
 });
 
 test('_headers: security headers, Bluetooth stays allowed for the app, CSP is as tight as the shell allows', () => {
