@@ -143,7 +143,8 @@ const pw = require('playwright');
     await jp.waitForSelector('[data-testid="brew-row"]');
     await jp.locator('[data-testid="brew-row"]:has-text("Ethiopia Guji")').first().click();
     await jp.waitForSelector('canvas[aria-label^="Weight and flow"]');
-    check(await jp.evaluate(() => { const c = document.querySelector('canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n > 2000; }), 'the detail chart actually draws');
+    const drawn = () => { const c = document.querySelector('canvas'); if (!c.width) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n > 2000; };
+    check(await jp.waitForFunction(drawn, null, { timeout: 5000 }).then(() => true, () => false), 'the detail chart actually draws');
     check(await jp.locator('.verdict').count() === 1 && await jp.locator('.metrics .metric').count() >= 4, 'detail shows metrics and the recomputed verdict');
     await jp.click('button:has-text("Compare…")');
     await jp.click('dialog[open] button:has-text("Compare")');
@@ -196,6 +197,7 @@ const pw = require('playwright');
     await jp.waitForSelector('.home-title');
     check(await jp.locator('.nudge[data-nudge^="dialled-"]').count() === 1, 'Home shows a dialled-in note from the history');
     await jp.click('.nudge button:has-text("Dismiss")');
+    await jp.waitForFunction(async () => !!(await window.dotScale.store.getMeta('pref:nudgeDismissed')), null, { timeout: 5000 }); // persisted before we reload
     await jp.reload();
     await jp.waitForSelector('.home-title');
     check(await jp.locator('.nudge[data-nudge^="dialled-"]').count() === 0, 'a dismissed nudge stays dismissed');
