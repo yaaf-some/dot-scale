@@ -15,7 +15,7 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 ## Layout (current; moving to the `app/` structure in PRODUCT.md §11)
 - `protocol.js` — BLE frame builder, CRC-16/MODBUS, streaming parser. Pure ES module, no DOM.
 - `index.html` — the whole UI: markup, CSS and app logic in one `<script type="module">`.
-- `scripts/serve.mjs` — local static server (`npm run serve`, port 8737). `serve.ps1` is the Windows equivalent.
+- `scripts/serve.mjs` — local static server (`npm run serve`, port 8737).
 - `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
 - `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
 - `.vercelignore` keeps tests/scripts out of the deployment.
@@ -34,3 +34,20 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
   (`recipe`, `autoStart`, `beep`, `history`) — migrate instead.
 - Must work at phone and iPad sizes, in Bluefy (iOS) and Chrome (Android, desktop).
 - Work on your own branch, open a **draft PR** to `main`; keep PRs small and focused. Never push to `main`.
+
+## Branches and the PR pipeline (controller-run)
+
+- `main` is **production** (live site). Nothing reaches it except the single release PR from `claude/admiring-brahmagupta-2rovr3`.
+- `claude/admiring-brahmagupta-2rovr3` is the **integration branch**. Every workstream PR targets it, never `main`.
+- CI (`.github/workflows/ci.yml`, job `check`) runs unit tests plus the Demo-mode smoke test on every PR.
+
+Worker rules:
+1. Branch from the integration branch, open a **draft** PR targeting it, and subscribe to your own PR's activity.
+2. CI red is yours to fix, root cause first. Never skip or delete a test to get green.
+3. If the PR conflicts, merge the integration branch into yours (never rebase or force-push shared history).
+4. When the work is done and CI is green, run `/code-review` on your own diff and fix what it finds, then mark the PR **ready for review** and say so in one line to the controller.
+5. Don't wait for the owner. Questions that block you go to the controller (`send_message` to `@parent`), not the owner.
+
+Controller rules: review each ready PR (checks plus an integration test across modules, not only that PR's own tests), send fixes
+to the owning worker, and merge into the integration branch once CI is green and the review is clean. Merge order follows
+dependencies. The release PR to `main` waits until the new app matches the old one's features and the owner gives the go.
