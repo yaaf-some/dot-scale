@@ -53,6 +53,8 @@ After the first deploy, open the `dot-scale.<your-subdomain>.workers.dev` URL sh
 curl -sI https://dot-scale.<your-subdomain>.workers.dev/ | grep -i -E "strict|content-security|permissions|nosniff"
 curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/wrangler.jsonc   # must be 404
 curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/README.md        # must be 404
+curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/_headers          # must be 404 (config, not a file)
+curl -s -o /dev/null -w "%{http_code}\n" https://dot-scale.<your-subdomain>.workers.dev/.assetsignore     # must be 404
 ```
 
 ## 3. Try other branches on your phone before they reach `main` (preview versions)
@@ -103,11 +105,12 @@ Vercel serves it again as long as the Vercel project still exists, so do the cle
 
 ### Browser data and the address
 
-Browsers keep data **per address** (origin). If your devices already use `https://coffee.yaafsome.fyi`, the address doesn't change,
-so saved brews, settings and the home-screen icon carry over. Any device still using `https://dot-scale.vercel.app` has data there
-that will **not** appear at `coffee.yaafsome.fyi`: use the app's History export (Export JSON) there and import it at the new address,
-then re-add the home-screen icon. The scale's Bluetooth permission is also per address; if the scale doesn't reconnect, press
-Connect and pick it again.
+Browsers keep data **per address** (origin). If your devices already use `https://coffee.yaafsome.fyi`, the address doesn't
+change, so saved brews and settings carry over (and a home-screen shortcut keeps working). Any device still using
+`https://dot-scale.vercel.app` has its data **there only**: it will not appear at `coffee.yaafsome.fyi`, and the current app has
+**no export yet**. Household sync in the redesign will carry data across devices later. If you only want to keep that history for
+now, keep using the old address until the release (so don't remove the Vercel project, see step 5, before then). The scale's
+Bluetooth permission is also per address; if the scale doesn't reconnect, press Connect and pick it again.
 
 ## 5. Clean up Vercel (after a few days of Cloudflare working)
 
@@ -120,7 +123,7 @@ Connect and pick it again.
 
 ## Security headers (`_headers`)
 
-HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, frame blocking, COOP, a Permissions-Policy that keeps
+HSTS (`max-age=31536000`, no `includeSubDomains`, no `preload`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, frame blocking, COOP, a Permissions-Policy that keeps
 **Bluetooth for the app itself** and turns off camera, microphone, geolocation, payment, USB, serial and HID, and a CSP:
 `default-src 'self'`, `connect-src 'self'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`.
 
