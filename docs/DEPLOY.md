@@ -112,9 +112,10 @@ days of everything working.
 
 Browsers keep data **per address** (origin). If your devices already use `https://coffee.yaafsome.fyi`, the address doesn't
 change, so saved brews and settings carry over (and a home-screen shortcut keeps working). Any device still using
-`https://dot-scale.vercel.app` has its data **there only**: it will not appear at `coffee.yaafsome.fyi`, and the current app has
-**no export yet**. Household sync (this PR) will carry data across devices later. If you only want to keep that history for now,
-keep using the old address until the release (so don't remove the Vercel project, see step 5, before then). The scale's
+`https://dot-scale.vercel.app` has its data **there only**: it will not appear at `coffee.yaafsome.fyi`, and the app currently live
+on `main` has **no export**. The redesign (this branch) has a backup export and import in the Journal, and household sync will carry
+data across devices. So either move that history by exporting it once the redesign is live on the old address, or keep using the
+old address for it until the release (don't remove the Vercel project, see step 5, before then). The scale's
 Bluetooth permission is also per address; if the scale doesn't reconnect, press Connect and pick it again.
 
 ## 5. Clean up Vercel (after a few days of Cloudflare working)

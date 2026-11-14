@@ -5,7 +5,7 @@ import { avatar, section, ago } from '../components.js';
 import { scaleLine } from '../scale-line.js';
 import { editProfile } from '../editors.js';
 import { methodById } from '../labels.js';
-import { pickNudge } from '../nudges.js';
+import { pickNudge, dismissNudge } from '../nudges.js';
 
 export const meta = { title: 'Home' };
 
@@ -39,6 +39,15 @@ function ticket(item) {
     h('span', { class: 'ticket-go', 'aria-hidden': 'true' }, icon('chevron', { size: 28 })));
 }
 
+function nudgeNode(nudge, store) {
+  const el = h('div', { class: 'nudge', 'data-tone': nudge.tone, 'data-nudge': nudge.id },
+    h('p', {}, nudge.text),
+    h('div', { class: 'chip-group' },
+      nudge.action ? h('a', { class: 'link', href: nudge.action.href }, nudge.action.label) : null,
+      nudge.tone === 'warn' ? null : h('button', { class: 'link', type: 'button', onclick: () => { el.remove(); dismissNudge(store, nudge.id); } }, 'Dismiss')));
+  return el;
+}
+
 export async function mount(root, ctx) {
   const { store, profile, profiles } = ctx;
 
@@ -61,8 +70,7 @@ export async function mount(root, ctx) {
     switcher,
     h('h1', { class: 'home-title' }, profile ? `${greeting()}, ${profile.name}` : 'Welcome'),
     scaleLine(ctx),
-    nudge ? h('div', { class: 'nudge', 'data-tone': nudge.tone, 'data-nudge': nudge.id },
-      h('p', {}, nudge.text), nudge.action ? h('a', { class: 'link', href: nudge.action.href }, nudge.action.label) : null) : null,
+    nudge ? nudgeNode(nudge, store) : null,
     items.length
       ? section('Brew again', h('div', { class: 'tickets' }, items.map(ticket)), { id: 'again' })
       : h('a', { class: 'ticket first', href: '#/brew', 'data-testid': 'first-brew' },
