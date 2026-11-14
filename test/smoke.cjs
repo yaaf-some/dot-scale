@@ -26,6 +26,29 @@ const { chromium } = require('playwright');
     check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join('; ') : ''}`);
     if (process.env.SCREENSHOT) await page.screenshot({ path: process.env.SCREENSHOT, fullPage: true });
   } catch (e) { check(false, e.message); }
+
+  // Offline: the service worker registers, caches the shell, and the app reloads (and runs Demo) with no network.
+  const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const off = await ctx.newPage();
+  const offErrors = [];
+  off.on('pageerror', (e) => offErrors.push(e.message));
+  try {
+    await off.goto(url);
+    const scope = await off.evaluate(() => Promise.race([
+      navigator.serviceWorker.ready.then((r) => r.scope),
+      new Promise((ok) => setTimeout(() => ok('none (timed out)'), 5000)),
+    ]));
+    check(scope === url, `service worker registers (scope ${scope})`);
+    await off.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 5000 });
+    await ctx.setOffline(true);
+    await off.reload();
+    check(await off.isVisible('#demoBtn'), 'page reloads while offline');
+    await off.click('#demoBtn');
+    await off.waitForFunction(() => !document.querySelector('#tareBtn').disabled, null, { timeout: 5000 });
+    check(true, 'demo runs offline (protocol.js served from cache)');
+    check(offErrors.length === 0, `no page errors offline${offErrors.length ? ': ' + offErrors.join('; ') : ''}`);
+  } catch (e) { check(false, 'offline: ' + e.message); }
+  await ctx.close().catch(() => {});
   await browser.close(); server.close();
   process.exit(failed ? 1 : 0);
 })();

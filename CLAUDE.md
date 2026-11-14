@@ -6,9 +6,13 @@ Live on Vercel at https://dot-scale.vercel.app — **every merge to `main` deplo
 ## Layout
 - `protocol.js` — BLE frame builder, CRC-16/MODBUS, streaming parser. Pure ES module, no DOM.
 - `index.html` — the whole UI: markup, CSS and app logic in one `<script type="module">`.
+- `sw.js` — service worker: network-first with a cache fallback, so the app opens offline. **Bump `VERSION` when you add a
+  file the app needs to `SHELL`.**
+- `icons/` — PNG icons (192/512, maskable, apple-touch) rendered from `icon.svg` by `node scripts/make-icons.cjs`.
+  The PNGs are committed; re-run the script after editing `icon.svg`.
 - `scripts/serve.mjs` — local static server (`npm run serve`, port 8737). `serve.ps1` is the Windows equivalent.
 - `test/*.test.mjs` — unit tests for `protocol.js` (`node:test`).
-- `test/smoke.cjs` — Playwright smoke test: runs Demo mode and simulates a pour.
+- `test/smoke.cjs` — Playwright smoke test: runs Demo mode, simulates a pour, then reloads offline via the service worker.
 - `.vercelignore` keeps tests/scripts out of the deployment.
 
 ## Commands
