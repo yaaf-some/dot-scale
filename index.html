@@ -619,8 +619,16 @@ setConnected(false);
 render();
 
 // Offline support (sw.js). Not available in every browser (e.g. some iOS WebViews) — the app works without it.
+// On the first visit the worker isn't controlling this page yet, so hand it the files we already loaded to cache.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker not registered:', e));
+  navigator.serviceWorker.register('sw.js')
+    .then(() => navigator.serviceWorker.ready)
+    .then((reg) => {
+      const urls = [location.href, ...performance.getEntriesByType('resource').map((e) => e.name)]
+        .filter((u) => new URL(u).origin === location.origin);
+      reg.active?.postMessage({ type: 'cache-urls', urls });
+    })
+    .catch((e) => console.warn('Service worker not registered:', e));
 }
 </script>
 </body>

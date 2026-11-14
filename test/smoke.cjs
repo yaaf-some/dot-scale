@@ -40,12 +40,20 @@ const { chromium } = require('playwright');
     ]));
     check(scope === url, `service worker registers (scope ${scope})`);
     await off.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 5000 });
+    // No file list in sw.js: the page hands over what it loaded on this first visit. Wait until that is cached.
+    await off.waitForFunction(async () => !!(await caches.match('protocol.js')), null, { timeout: 5000, polling: 100 });
+    check(true, 'first-visit files are cached without a file list');
+    // A file the page never loaded (stands in for a new app/ module) is cached the first time it's fetched.
+    await off.evaluate(() => fetch('icons/icon-512.png').then((r) => r.blob()));
+    await off.waitForFunction(async () => !!(await caches.match('icons/icon-512.png')), null, { timeout: 5000, polling: 100 });
     await ctx.setOffline(true);
     await off.reload();
     check(await off.isVisible('#demoBtn'), 'page reloads while offline');
     await off.click('#demoBtn');
     await off.waitForFunction(() => !document.querySelector('#tareBtn').disabled, null, { timeout: 5000 });
     check(true, 'demo runs offline (protocol.js served from cache)');
+    const lateOk = await off.evaluate(() => fetch('icons/icon-512.png').then((r) => r.ok, () => false));
+    check(lateOk, 'a file first fetched after install is served offline');
     check(offErrors.length === 0, `no page errors offline${offErrors.length ? ': ' + offErrors.join('; ') : ''}`);
   } catch (e) { check(false, 'offline: ' + e.message); }
   await ctx.close().catch(() => {});
