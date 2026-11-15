@@ -1,0 +1,22 @@
+name: Node 27 (alpha)
+description: >
+  Installs an exact Node.js 27 alpha from nodejs.org and verifies the tarball against the published SHASUMS256.txt.
+  No third-party action. Bump `version` here when moving to a newer build.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NODE_VERSION: v27.0.0-alpha.0.1.0
+      run: |
+        set -euo pipefail
+        base="https://nodejs.org/dist/${NODE_VERSION}"
+        file="node-${NODE_VERSION}-linux-x64.tar.xz"
+        dir="${RUNNER_TEMP}/node-dl"
+        mkdir -p "$dir"
+        curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
+        curl -fsSL --retry 3 -o "$dir/SHASUMS256.txt" "$base/SHASUMS256.txt"
+        (cd "$dir" && grep " ${file}\$" SHASUMS256.txt | sha256sum -c -)
+        tar -xJf "$dir/$file" -C "$RUNNER_TEMP"
+        echo "${RUNNER_TEMP}/node-${NODE_VERSION}-linux-x64/bin" >> "$GITHUB_PATH"

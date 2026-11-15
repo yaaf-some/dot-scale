@@ -9,5 +9,5 @@
     "smoke": "node test/smoke.cjs",
     "check": "npm test && npm run smoke"
   },
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=22.13" }
 }
