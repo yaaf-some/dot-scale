@@ -114,7 +114,7 @@ export function renderLive(host, F) {
       primaryMode = mode;
       setHidden(primary, mode === 'none');
       if (mode === 'start') { primary.textContent = kind === 'espresso' ? 'Start timer (pump on)' : 'Start timer'; primary.onclick = () => { unlockAudio(); run.dispatch({ type: 'start' }); }; primary.disabled = false; }
-      else if (mode === 'pump') { primary.textContent = 'Pump stopped'; primary.onclick = () => run.dispatch({ type: 'pumpOff' }); primary.disabled = false; }
+      else if (mode === 'pump') { primary.textContent = 'I stopped the pump'; primary.onclick = () => run.dispatch({ type: 'pumpOff' }); primary.disabled = false; }
     }
     if (running) chart.set({ points: run.points, targetG: kind === 'espresso' ? s.targetYield : steps.at(-1) && lastTarget(steps), tEnd: kind === 'espresso' ? 35 : s.brew?.planEndS, steps: kind === 'espresso' ? null : steps });
   };
