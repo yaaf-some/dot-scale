@@ -68,7 +68,7 @@
 .live-stats b { font-size: var(--step-4); font-size: clamp(2.5rem, 11cqi, 5rem); color: var(--ink); font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; }
 .live-stats span:last-child b { font-size: var(--step-3); font-size: clamp(1.75rem, 6cqi, 3rem); }
 .progress { height: 18px; border-radius: var(--r-chip); background: var(--sunken); overflow: hidden; border: 1px solid var(--line); }
-.progress i { display: block; height: 100%; width: var(--p, 0%); background: var(--cobalt); border-radius: inherit; transition: width var(--t-fast) linear, background var(--t-base); }
+.progress i { display: block; height: 100%; width: var(--p, 0%); background: var(--cobalt); border-radius: inherit; transition: background var(--t-base); } /* no width transition: it animated layout on every sample (perf) */
 .progress-text { text-align: center; color: var(--ink-soft); font-variant-numeric: tabular-nums; min-height: 1.5em; }
 .brew-stage[data-hit] .progress i { background: var(--crema); }
 

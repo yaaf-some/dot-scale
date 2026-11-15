@@ -3,10 +3,12 @@ import { h, append } from '../dom.js';
 import { icon } from '../icons.js';
 import { group, emptyState } from '../components.js';
 import { methodById } from '../labels.js';
-import { groupByDay, filterBrews, filterChoices, ratioText, stars, beanOf, grindText, NO_BEAN } from '../../journal/history.js';
+import { groupByDay, limitDays, filterBrews, filterChoices, ratioText, stars, beanOf, grindText, NO_BEAN } from '../../journal/history.js';
 import { sparkline } from './chart.js';
 import { starsNode, timeText, clock, loadAll } from './shared.js';
 import { openBackup } from './backup-ui.js';
+
+const PAGE = 40; // rows drawn at first; more as the list is scrolled (each row draws a sparkline, so 600+ rows at once is slow)
 
 export function brewTitle(b, beans) { return beanOf(beans, b)?.name ?? methodById(b.method).name; }
 
@@ -30,6 +32,9 @@ export async function mount(root, ctx) {
   const filters = { profileId: ctx.profile?.id ?? 'all', method: 'all', beanId: 'all' };
   const body = h('div', { class: 'journal-body' });
   let data = await loadAll(ctx.store);
+  let limit = PAGE, more = null;
+  const resetLimit = () => { limit = PAGE; };
+  ctx.signal.addEventListener('abort', () => more?.disconnect(), { once: true });
 
   const paint = () => {
     const { brews, beans, profiles } = data;
@@ -47,13 +52,15 @@ export async function mount(root, ctx) {
     const shown = filterBrews(brews, filters);
     const beanName = (id) => beans.find((b) => b.id === id)?.name ?? 'Unknown beans';
     const bar = h('div', { class: 'filters' },
-      select('Who', filters.profileId, [{ value: 'all', label: 'Everyone' }, ...profiles.map((p) => ({ value: p.id, label: p.name }))], (v) => { filters.profileId = v; paint(); }),
-      select('Method', filters.method, [{ value: 'all', label: 'All methods' }, ...choices.methods.map((id) => ({ value: id, label: methodById(id).name }))], (v) => { filters.method = v; paint(); }),
-      select('Beans', filters.beanId, [{ value: 'all', label: 'All beans' }, ...choices.beanIds.map((id) => ({ value: id, label: beanName(id) })), ...(choices.noBean ? [{ value: NO_BEAN, label: 'No beans noted' }] : [])], (v) => { filters.beanId = v; paint(); }));
+      select('Who', filters.profileId, [{ value: 'all', label: 'Everyone' }, ...profiles.map((p) => ({ value: p.id, label: p.name }))], (v) => { filters.profileId = v; resetLimit(); paint(); }),
+      select('Method', filters.method, [{ value: 'all', label: 'All methods' }, ...choices.methods.map((id) => ({ value: id, label: methodById(id).name }))], (v) => { filters.method = v; resetLimit(); paint(); }),
+      select('Beans', filters.beanId, [{ value: 'all', label: 'All beans' }, ...choices.beanIds.map((id) => ({ value: id, label: beanName(id) })), ...(choices.noBean ? [{ value: NO_BEAN, label: 'No beans noted' }] : [])], (v) => { filters.beanId = v; resetLimit(); paint(); }));
     const trail = filters.beanId !== 'all' && filters.beanId !== NO_BEAN
       ? h('a', { class: 'btn secondary small trail-link', href: `#/journal/bean/${encodeURIComponent(filters.beanId)}?${new URLSearchParams({ ...(filters.method !== 'all' ? { method: filters.method } : {}), ...(filters.profileId !== 'all' ? { profile: filters.profileId } : {}) })}` }, icon('chevron', { size: 18 }), `Dial-in trail for ${beanName(filters.beanId)}`)
       : null;
-    const days = groupByDay(shown);
+    const all = groupByDay(shown);
+    const { days, hidden } = limitDays(all, limit);
+    more?.disconnect(); more = null;
     body.replaceChildren();
     append(body, [
       bar, trail,
@@ -61,8 +68,13 @@ export async function mount(root, ctx) {
         ? h('div', { class: 'days' }, days.map((d) => h('section', { class: 'day', 'aria-label': d.label },
           h('h2', { class: 'day-head' }, d.label), group(d.brews.map((b) => row(b, beans))))))
         : emptyState({ iconName: 'journal', title: 'No brews match', text: 'Try a different person, method or beans.',
-          actions: [h('button', { class: 'btn secondary', type: 'button', onclick: () => { Object.assign(filters, { profileId: 'all', method: 'all', beanId: 'all' }); paint(); } }, 'Show everything')] }),
+          actions: [h('button', { class: 'btn secondary', type: 'button', onclick: () => { Object.assign(filters, { profileId: 'all', method: 'all', beanId: 'all' }); resetLimit(); paint(); } }, 'Show everything')] }),
     ]);
+    if (hidden > 0) { // older brews: a button, which also loads them by itself when it scrolls near
+      const next = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'journal-more', onclick: () => { limit += PAGE; paint(); } }, `Show older brews (${hidden})`);
+      body.append(next);
+      if (typeof IntersectionObserver === 'function') { more = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) next.click(); }, { rootMargin: '600px' }); more.observe(next); }
+    }
   };
 
   append(root, [
