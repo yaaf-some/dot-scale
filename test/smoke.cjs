@@ -64,6 +64,15 @@ const pw = require('playwright');
     const motionWait = async (label, fn, timeout) => {
       try { await page.waitForFunction(fn, null, { timeout }); } catch (e) { throw new Error(`${label} timed out: ${await motionState()}`); }
     };
+    // The first exit animation on a cold software-rendered WebKit (CI runner) stalls the page's main thread for up to ~2 s once
+    // (timers run late, see `late` below; measured on CI), which is no property of the app. Play one throwaway dialog first, with a
+    // generous limit, so the real checks below keep their tight 2 s limits and still catch a hung exit animation.
+    const warmStart = Date.now();
+    await page.evaluate(async () => { const m = await import('/app/ui/dialog.js'); m.openDialog({ title: 'Warm-up', body: null }); });
+    await page.waitForSelector('dialog.sheet[open]');
+    await page.evaluate(() => document.querySelector('dialog').dismiss(''));
+    await motionWait('the warm-up dialog closes', () => !document.querySelector('dialog'), 15000);
+    check(true, `dialog exit animation is warm (first one took ${Date.now() - warmStart} ms)`);
     await page.evaluate(async () => {
       window.__motionEv = [];
       for (const t of ['cancel', 'close']) document.addEventListener(t, (e) => window.__motionEv.push(`${t}@${Math.round(performance.now())}`), true);
