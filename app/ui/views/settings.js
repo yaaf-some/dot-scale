@@ -79,7 +79,7 @@ registerSettingsSection({
           gate(h('button', { class: 'btn small danger', type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Factory reset the scale?', message: 'This clears all of its settings, including its name.', confirmLabel: 'Reset scale', danger: true })) scale.factoryReset(); } }, 'Reset')))),
       group(
         switchRow({ title: 'Start the timer when pouring starts', checked: prefs.get('autoStart', true), onchange: (v) => prefs.set('autoStart', v) }),
-        switchRow({ title: 'Beep at target', checked: prefs.get('beep', true), onchange: (v) => prefs.set('beep', v) })),
+        switchRow({ title: 'Beep at target', sub: 'Also vibrates on devices that can (not iPhone).', checked: prefs.get('beep', true), onchange: (v) => prefs.set('beep', v) })),
     ], { id: 'scale' });
     paint();
     return el;

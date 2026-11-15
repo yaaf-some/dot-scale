@@ -39,3 +39,10 @@ export function beep(kind = 'step') {
   }
   return true;
 }
+
+/** A short vibration with the same pattern names as beep(), where the browser has navigator.vibrate (Android, desktop Chrome;
+ *  not iOS/Bluefy, where the sound and the on-screen cue carry the message). Returns false when there is nothing to vibrate. */
+export function buzz(kind = 'step') {
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return false;
+  try { return navigator.vibrate({ target: [90, 70, 90], step: 60, done: 160 }[kind] ?? 60); } catch { return false; }
+}

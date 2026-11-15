@@ -87,7 +87,7 @@ export function renderLive(host, F) {
     // progress toward the target
     const target = kind === 'espresso' ? s.targetYield : s.brew?.targetG ?? F.firstTarget ?? null;
     const p = Math.round((target ? Math.min(1, Math.max(0, s.grams / target)) : s.progress) * 100);
-    progress.firstChild.style.setProperty('--p', `${p}%`);
+    progress.firstChild.style.setProperty('--p', String(p / 100));
     progress.setAttribute('aria-valuenow', String(p));
     progressText.textContent = target ? `${s.grams.toFixed(1)} of ${fmtG(target, target < 100 ? 1 : 0)} g${s.grams < target ? ` · ${Math.max(0, target - s.grams).toFixed(1)} g to go` : ''}` : kind === 'moka' ? 'Dose and water are logged; now the heat' : '';
     if (phases) for (const li of phases.children) {

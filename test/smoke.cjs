@@ -48,6 +48,17 @@ const pw = require('playwright');
     check((await page.locator('.home-title').innerText()).includes('Alexa'), 'Home greets the chosen profile');
     check(await page.locator('.scale-line[data-status="connected"]').count() === 1, 'demo scale shows as connected on Home');
 
+    // ---- motion: toasts and dialogs leave through data-leaving, then really close (instant under reduced motion) ----
+    await page.evaluate(async () => { const m = await import('/app/ui/dialog.js'); window.__dv = 'pending'; m.confirmDialog({ title: 'Sure?', message: 'Test', confirmLabel: 'Yes' }).then((v) => (window.__dv = v)); });
+    await page.waitForSelector('dialog.sheet[open]');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('dialog'), null, { timeout: 2000 });
+    check((await page.evaluate(() => window.__dv)) === false, 'Escape closes a dialog (after its exit animation) and resolves as dismissed');
+    await page.evaluate(async () => { (await import('/app/ui/toast.js')).toast('Saved', { ms: 300 }); });
+    await page.waitForSelector('.toast');
+    await page.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 2000 });
+    check(true, 'a toast shows and then removes itself');
+
     // ---- Brew: method picker -> recipe -> prep -> live -> result -> saved Brew (espresso, through Demo mode) ----
     const brewsOf = (method) => page.evaluate((m) => window.dotScale.store.list('brew').then((l) => l.filter((b) => b.method === m)), method);
     const demo = (id) => page.click(`[data-demo="${id}"]`);

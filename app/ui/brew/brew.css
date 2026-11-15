@@ -17,7 +17,7 @@
   background: var(--raised); border: 1px solid var(--line); color: inherit; text-decoration: none;
   transition: transform var(--t-fast) var(--ease);
 }
-.method-tile:active { transform: scale(0.985); }
+.method-tile:active { transform: scale(0.98); }
 .method-tile[data-first] { border-color: var(--ink); }
 .method-tile .method-art { grid-row: 1 / span 2; }
 .method-name { font-family: var(--font-display); font-size: var(--step-2); font-weight: 600; align-self: end; }
@@ -68,7 +68,7 @@
 .live-stats b { font-size: var(--step-4); font-size: clamp(2.5rem, 11cqi, 5rem); color: var(--ink); font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; }
 .live-stats span:last-child b { font-size: var(--step-3); font-size: clamp(1.75rem, 6cqi, 3rem); }
 .progress { height: 18px; border-radius: var(--r-chip); background: var(--sunken); overflow: hidden; border: 1px solid var(--line); }
-.progress i { display: block; height: 100%; width: var(--p, 0%); background: var(--cobalt); border-radius: inherit; transition: width var(--t-fast) linear, background var(--t-base); }
+.progress i { display: block; height: 100%; width: 100%; background: var(--cobalt); transform: scaleX(var(--p, 0)); transform-origin: left center; transition: transform var(--t-fast) linear, background var(--t-base); } /* compositor-only: --p is a 0..1 ratio */
 .progress-text { text-align: center; color: var(--ink-soft); font-variant-numeric: tabular-nums; min-height: 1.5em; }
 .brew-stage[data-hit] .progress i { background: var(--crema); }
 
@@ -89,8 +89,17 @@ canvas.chart { display: block; width: 100%; height: 160px; }
 .live-actions .btn { min-height: var(--target-live); }
 
 @media (prefers-reduced-motion: no-preference) {
-  .brew-stage[data-hit] .live-cue { animation: hit 900ms var(--ease); }
-  @keyframes hit { 0% { transform: scale(1); } 30% { transform: scale(1.03); } 100% { transform: scale(1); } }
+  .brew-stage[data-enter] { animation: stage-in var(--t-base) var(--ease) backwards; }
+  @keyframes stage-in { from { opacity: 0; transform: translateY(8px); } }
+  /* a step reached: one quick pulse */
+  .brew-stage[data-hit] .live-cue { animation: hit 360ms var(--ease); }
+  @keyframes hit { 40% { transform: scale(1.03); } }
+  /* shot complete (the stop cue): the one spring in the app. The plain declaration first is the fallback without linear(). */
+  .brew-stage[data-hit] .live-cue[data-tone="stop"] { animation: pop 320ms var(--ease); }
+  @supports (animation-timing-function: linear(0, 1)) {
+    .brew-stage[data-hit] .live-cue[data-tone="stop"] { animation: pop var(--spring-t) var(--spring); }
+  }
+  @keyframes pop { from { transform: scale(0.92); opacity: 0.6; } to { transform: scale(1); opacity: 1; } }
 }
 
 /* iPad on the counter: weight and chart side by side */
