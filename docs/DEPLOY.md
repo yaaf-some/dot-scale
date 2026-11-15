@@ -75,10 +75,10 @@ Sync is optional and separate from hosting: until you turn it on, the app shows 
    npx wrangler login
    npx wrangler d1 create dot-scale
    ```
-   Then **uncomment the `d1_databases` block in `wrangler.jsonc`** and put the printed `database_id` in place of
-   `REPLACE_WITH_D1_DATABASE_ID`, and commit it (a D1 database id is a resource id, not an account id or a secret; the Cloudflare
-   account id and API tokens never go into the repo). Claude can do this edit for you if you send the id. With the block enabled and
-   the placeholder id still there, a deploy fails (a test guards against merging that).
+   **Done for this project:** the `d1_databases` block in `wrangler.jsonc` is enabled with the id of the `dot-scale` database (a D1
+   database id is a resource id, not an account id or a secret; the Cloudflare account id and API tokens never go into the repo).
+   For a new database, replace the `database_id` there. With the placeholder id `REPLACE_WITH_D1_DATABASE_ID` a deploy fails (a
+   test guards against merging that).
 2. Create the tables: `npx wrangler d1 migrations apply dot-scale --remote`. No terminal? Dashboard →
    **Storage & databases → D1 → dot-scale → Console**, paste `migrations/0001_init.sql`, run. Repeat for any later
    `migrations/000N_*.sql` (deploys do not run migrations).
