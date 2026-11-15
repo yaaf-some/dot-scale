@@ -5,6 +5,13 @@
 // views (pulling in their whole module graph through the normal fetch path) and then hand the worker the list of
 // everything that was loaded. Importing a view only runs its module-level code; nothing is mounted.
 const TAB_VIEWS = ['home', 'brew', 'journal', 'learn', 'settings', 'onboarding'];
+// Modules loaded on demand (dynamic import) that the views above do not import statically. Keep in step with the
+// import() calls in app/; test/preload.test.mjs fails when one is missing here.
+const LAZY = ['./ui/brew/result.js', './journal/nudge.js', './sync/client.js', './sync/store-adapter.js'];
+
+// Warm-up is background work: wait for real idle time, one import at a time, and skip it when the user asked to save data.
+const saveData = () => navigator.connection?.saveData === true;
+const whenIdle = (fn) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 1500));
 
 export function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
@@ -23,11 +30,13 @@ export function registerServiceWorker() {
       });
       share();
       const warm = async () => {
-        await Promise.allSettled(TAB_VIEWS.map((v) => import(`./ui/views/${v}.js`)));
+        for (const m of [...TAB_VIEWS.map((v) => `./ui/views/${v}.js`), ...LAZY]) {
+          try { await import(m); } catch { /* best effort */ }
+        }
         await share();
         document.documentElement.dataset.offlineReady = ''; // everything the app needs offline is cached (also used by the smoke test)
       };
-      const idle = () => setTimeout(warm, 500);
+      const idle = () => { if (!saveData()) whenIdle(warm); };
       if (document.readyState === 'complete') idle(); else addEventListener('load', idle, { once: true });
     })
     .catch((e) => console.warn('Service worker not registered:', e));

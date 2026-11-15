@@ -30,21 +30,33 @@ export function createChart({ label = 'Weight and flow over time', height } = {}
   if (height) canvas.style.height = `${height}px`;
   let data = { points: [] };
   let queued = false;
+  // Reading colours (getComputedStyle) and the canvas size (clientWidth) inside a draw forces a style recalculation and a layout
+  // every frame, 10x a second on the live screen. Colours are re-read only when the theme changes; the size comes from the
+  // ResizeObserver (clientWidth is the fallback until it has reported).
+  const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
+  let colors = null, colorKey = '', box = null;
+  const palette = () => {
+    const key = `${document.documentElement.dataset.theme ?? ''}|${mq?.matches ?? ''}`;
+    if (!colors || key !== colorKey) {
+      colorKey = key;
+      colors = { ink: css('--ink', '#222'), soft: css('--ink-faint', '#777'), line: css('--line', '#ccc'), cobalt: css('--cobalt', '#2342b5'), crema: css('--crema', '#e3a63b'), cremaInk: css('--crema-ink', '#e3a63b'), font: `12px ${css('--font-ui', 'system-ui')}` };
+    }
+    return colors;
+  };
 
   function draw() {
     queued = false;
     const dpr = Math.min(globalThis.devicePixelRatio || 1, 3);
-    const w = canvas.clientWidth, hgt = canvas.clientHeight;
+    const w = box?.w || canvas.clientWidth, hgt = box?.h || canvas.clientHeight;
     if (!w || !hgt) return;
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(hgt * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(hgt * dpr); }
     const g = canvas.getContext('2d');
     if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, hgt);
-    const ink = css('--ink', '#222'), soft = css('--ink-faint', '#777'), line = css('--line', '#ccc');
-    const cobalt = css('--cobalt', '#2342b5'), crema = css('--crema', '#e3a63b');
+    const { ink, soft, line, cobalt, crema, cremaInk, font } = palette();
     const L = layout(data.points, { targetG: data.targetG, tEnd: data.tEnd, w, hgt });
-    g.font = `12px ${css('--font-ui', 'system-ui')}`;
+    g.font = font;
     if (!L) { g.fillStyle = soft; g.fillText('The curve appears when the timer starts', 10, hgt / 2); return; }
     const { x, yG, yF, pad } = L;
     // baseline + time ticks
@@ -62,7 +74,7 @@ export function createChart({ label = 'Weight and flow over time', height } = {}
     if (Number.isFinite(data.targetG)) {
       g.strokeStyle = crema; g.lineWidth = 2; g.setLineDash([6, 5]);
       g.beginPath(); g.moveTo(pad.l, yG(data.targetG)); g.lineTo(w - pad.r, yG(data.targetG)); g.stroke(); g.setLineDash([]);
-      g.fillStyle = css('--crema-ink', crema); g.textAlign = 'left'; g.fillText(`${Math.round(data.targetG)} g`, pad.l + 2, yG(data.targetG) - 5);
+      g.fillStyle = cremaInk; g.textAlign = 'left'; g.fillText(`${Math.round(data.targetG)} g`, pad.l + 2, yG(data.targetG) - 5);
     }
     // flow (thin), then weight (bold)
     const path = (fy, key) => { g.beginPath(); data.points.forEach((p, i) => (i ? g.lineTo(x(p.t), fy(p[key])) : g.moveTo(x(p.t), fy(p[key])))); g.stroke(); };
@@ -75,9 +87,12 @@ export function createChart({ label = 'Weight and flow over time', height } = {}
   }
 
   const schedule = () => { if (queued) return; queued = true; (globalThis.requestAnimationFrame ?? setTimeout)(draw); };
-  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver((entries) => {
+    const r = entries[entries.length - 1]?.contentRect;
+    if (r) box = { w: r.width, h: r.height };
+    schedule();
+  }) : null;
   ro?.observe(canvas);
-  const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
   mq?.addEventListener?.('change', schedule);
 
   return {

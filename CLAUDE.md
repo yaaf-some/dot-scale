@@ -15,7 +15,10 @@ no dependencies. Hosted on **Cloudflare** (Worker + static assets) at https://co
   if so, say so in your PR).
 
 ## Layout
-- `index.html` — thin shell: head, tokens, `<nav id="tabs">`, `<main id="view">`, `<script type="module" src="app/main.js">`.
+- `index.html` — thin shell: head, tokens, `<nav id="tabs">`, `<main id="view">`, `<script type="module" src="app/main.js">`, plus a `modulepreload`
+  list of the critical graph (`app/main.js` + the Home view, static imports only). **Regenerate it with `node scripts/preload-links.mjs` whenever
+  those imports change**; `test/preload.test.mjs` fails on drift. Heavy code stays out of that graph on purpose (`insights/analyze.js`,
+  `sync/client.js`, the brew result screen): load it with a dynamic `import()` and add the path to `LAZY` in `app/pwa.js` (the test checks that too).
 - `app/main.js` — boot, hash router, view mounting. `app/modules.js` — side-effect imports for feature modules.
 - `app/core/` — `store.js` (IndexedDB records + sync hooks, adapters in `store-adapters.js`), `bootstrap.js` + `seeds.js`
   (first-run seeds and the localStorage migration), `scale.js` (BLE + auto-reconnect), `demo-scale.js` (simulator), `events.js`.

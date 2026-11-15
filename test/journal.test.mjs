@@ -165,3 +165,11 @@ test('interrupted brews are not trend points: not in the trail, not dialled in, 
   const later = { ...good('n', 4000), grind: { value: 8 } };
   assert.deepEqual(analyze(later, { method: 'espresso', history: [a, cut] }), analyze(later, { method: 'espresso', history: [a] }), 'a later shot is judged as if the interrupted one never happened');
 });
+
+test('limitDays cuts the day groups at a row and counts what is left out', async () => {
+  const { limitDays } = await import('../app/journal/history.js');
+  const days = [{ label: 'A', brews: [1, 2, 3] }, { label: 'B', brews: [4, 5] }, { label: 'C', brews: [6] }];
+  assert.deepEqual(limitDays(days, 4), { days: [days[0], { label: 'B', brews: [4] }], hidden: 2 });
+  assert.deepEqual(limitDays(days, 99), { days, hidden: 0 });
+  assert.deepEqual(limitDays(days, 0), { days: [], hidden: 6 });
+});

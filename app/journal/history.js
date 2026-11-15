@@ -175,3 +175,15 @@ export function groupByBean(brews) {
   }
   return [...groups.values()];
 }
+
+/** The first `limit` brews of the day groups, cut at a row, and how many were left out. */
+export function limitDays(days, limit) {
+  const out = [];
+  let left = limit;
+  for (const d of days) {
+    if (left <= 0) break;
+    out.push(left >= d.brews.length ? d : { ...d, brews: d.brews.slice(0, left) });
+    left -= d.brews.length;
+  }
+  return { days: out, hidden: Math.max(0, days.reduce((n, d) => n + d.brews.length, 0) - limit) };
+}
