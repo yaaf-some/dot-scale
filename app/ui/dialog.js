@@ -2,6 +2,7 @@
 // WebKit has had showModal since 15.4; if it's missing we fall back to an `open` dialog styled as a sheet.
 // `closedby="any"` isn't in Safari, so click-outside is implemented by hand.
 import { h, setChildren } from './dom.js';
+import { leave } from './motion.js';
 
 let seq = 0;
 
@@ -9,12 +10,18 @@ function wire(dlg, resolve) {
   document.body.append(dlg);
   const finish = () => { dlg.remove(); resolve(dlg.returnValue || null); };
   dlg.addEventListener('close', finish, { once: true });
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(''); });
+  // Every way out plays the exit animation first (motion.js leave(); instant under reduced motion), then closes for real.
+  let leaving = false;
+  const dismiss = (value) => { if (leaving) return; leaving = true; leave(dlg, () => dlg.close(value)); };
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dismiss(''); });
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); dismiss(''); }); // Esc / Android back
+  dlg.dismiss = dismiss; // callers that close by hand use dlg.dismiss(value) to get the exit animation
+  dlg.addEventListener('submit', (e) => { if (e.defaultPrevented || e.target.method !== 'dialog') return; e.preventDefault(); dismiss(e.submitter?.value ?? ''); });
   if (typeof dlg.showModal === 'function') dlg.showModal();
   else {
     dlg.close = (v = '') => { dlg.returnValue = v; dlg.removeAttribute('open'); dlg.dispatchEvent(new Event('close')); };
     dlg.setAttribute('open', '');
-    dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') dlg.close(''); });
+    dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismiss(''); });
   }
 }
 
@@ -89,15 +96,15 @@ export function formDialog({ title, fields, values = {}, submitLabel = 'Save', d
       h('h2', { id, class: 'sheet-title' }, title),
       h('div', { class: 'sheet-body' }, note ? h('p', { class: 'sheet-text' }, note) : null, controls.map((c) => c.el)),
       h('div', { class: 'sheet-actions' },
-        deletable ? h('button', { type: 'button', class: 'btn danger quiet-left', onclick: () => { result = { __delete: true }; dlg.close('delete'); } }, 'Delete') : null,
-        h('button', { type: 'button', class: 'btn quiet', onclick: () => dlg.close('') }, 'Cancel'),
+        deletable ? h('button', { type: 'button', class: 'btn danger quiet-left', onclick: () => { result = { __delete: true }; dlg.dismiss('delete'); } }, 'Delete') : null,
+        h('button', { type: 'button', class: 'btn quiet', onclick: () => dlg.dismiss('') }, 'Cancel'),
         h('button', { type: 'submit', class: 'btn primary' }, submitLabel)));
     const dlg = h('dialog', { class: 'sheet', 'aria-labelledby': id }, form);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!form.reportValidity()) return;
       result = Object.fromEntries(controls.map((c) => [c.f.name, c.read()]));
-      dlg.close('ok');
+      dlg.dismiss('ok');
     });
     wire(dlg, () => resolve(result));
   });

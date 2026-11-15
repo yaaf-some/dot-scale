@@ -20,7 +20,7 @@ no dependencies. Hosted on **Cloudflare** (Worker + static assets) at https://co
 - `app/core/` — `store.js` (IndexedDB records + sync hooks, adapters in `store-adapters.js`), `bootstrap.js` + `seeds.js`
   (first-run seeds and the localStorage migration), `scale.js` (BLE + auto-reconnect), `demo-scale.js` (simulator), `events.js`.
 - `app/ui/` — `tokens.css` (all design tokens), `app.css` (layout + components), `components.js`, `dialog.js`, `editors.js`,
-  `scale-line.js`, `nudges.js`, `settings-sections.js`, `router.js`, `theme.js`, and `views/<name>.js`.
+  `scale-line.js`, `motion.js` (view-transition helper, `leave()`, skeleton; motion tokens live in `tokens.css`, see DESIGN.md "Motion"), `nudges.js`, `settings-sections.js`, `router.js`, `theme.js`, and `views/<name>.js`.
 - `app/pwa.js` — registers `sw.js` (kept out of index.html so a strict CSP with no inline script works) and, once the page is
   idle, imports the tab views so their whole module graph is cached for offline use. Add a tab view to `TAB_VIEWS` there.
 - `sw.js` — service worker, so the installed app opens offline. No file list: it caches whatever same-origin files the app

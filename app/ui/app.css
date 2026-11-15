@@ -111,8 +111,11 @@ main.view-host {
 .scale-state { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 600; flex: 1 1 auto; min-width: 0; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink-faint); flex: none; }
 .scale-line[data-status="connected"] .status-dot { background: var(--ok); }
-.scale-line[data-status="connecting"] .status-dot, .scale-line[data-status="reconnecting"] .status-dot { background: var(--crema); animation: pulse 1.1s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: 0.35; } }
+.scale-line[data-status="connecting"] .status-dot, .scale-line[data-status="reconnecting"] .status-dot { background: var(--crema); }
+@media (prefers-reduced-motion: no-preference) {
+  .scale-line[data-status="connecting"] .status-dot, .scale-line[data-status="reconnecting"] .status-dot { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+}
 .battery { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-soft); font-size: var(--step--1); font-variant-numeric: tabular-nums; }
 .demo-tag { font-size: 0.75rem; font-weight: 650; padding: 2px 8px; border-radius: var(--r-chip); background: var(--crema); color: var(--on-crema); }
 
@@ -226,16 +229,30 @@ dialog.sheet[open]:not(:modal) { position: fixed; inset: 50% auto auto 50%; tran
 .sheet-text { color: var(--ink-soft); }
 .sheet-actions { display: flex; gap: var(--s2); justify-content: flex-end; flex-wrap: wrap; }
 .sheet-actions .quiet-left { margin-right: auto; }
+/* Enter and exit are plain keyframes (not @starting-style + allow-discrete, which older WebKit lacks). dialog.js sets
+   data-leaving, waits --t-exit, then closes. No motion preference or no animation support: it simply opens and closes. */
 @media (prefers-reduced-motion: no-preference) {
   dialog.sheet[open] { animation: sheet-in var(--t-base) var(--ease); }
+  dialog.sheet[open]::backdrop { animation: fade-in var(--t-base) var(--ease); }
+  dialog.sheet[data-leaving] { animation: sheet-out var(--t-exit) var(--ease-in) forwards; }
+  dialog.sheet[data-leaving]::backdrop { animation: fade-out var(--t-exit) var(--ease-in) forwards; }
   @keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } }
+  @keyframes sheet-out { to { opacity: 0; transform: translateY(8px); } }
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes fade-out { to { opacity: 0; } }
 }
 
 /* ---------- Toasts ---------- */
 #toasts { position: fixed; z-index: 200; inset: auto 0 calc(var(--tabbar) + var(--s4) + env(safe-area-inset-bottom, 0px)) 0; display: grid; justify-items: center; pointer-events: none; padding: 0 var(--s4); }
 @media (min-width: 768px) { #toasts { inset: auto 0 var(--s5) var(--rail); } }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--s4); border-radius: var(--r-btn); background: var(--ink); color: var(--paper); font-weight: 500; max-width: 32rem; }
-.toast-action { background: none; border: 0; color: var(--crema); font-weight: 650; min-height: 36px; }
+.toast-action { background: none; border: 0; color: var(--crema); font-weight: 650; min-height: 44px; }
+@media (prefers-reduced-motion: no-preference) {
+  .toast { animation: toast-in var(--t-base) var(--ease); }
+  .toast[data-leaving] { animation: toast-out var(--t-exit) var(--ease-in) forwards; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes toast-out { to { opacity: 0; transform: translateY(4px); } }
+}
 
 /* ---------- Misc ---------- */
 pre.log { margin: 0; padding: var(--s3); background: var(--sunken); border-radius: var(--r-field); max-height: 240px; overflow: auto; font: 0.75rem/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
@@ -244,8 +261,57 @@ details.adv > summary::-webkit-details-marker { display: none; }
 details.adv > summary::after { content: ""; width: 8px; height: 8px; margin-left: var(--s3); border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform var(--t-base); }
 details.adv[open] > summary::after { transform: rotate(-135deg); }
 
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--t-base); }
+
+/* ---------- Press, hover and focus feedback ----------
+   :active scales by 2% (transform only); hover is limited to devices that hover. Focus uses the global :focus-visible ring. */
+.tab, .profile-chip, .chip-choice > span, .tile > span, .seg button, .scale5 button, .method-tile, .back, button.row, .link {
+  transition: transform var(--t-fast) var(--ease), background var(--t-fast);
 }
-@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+.tab:active, .profile-chip:active, .chip-choice:active > span, .tile:active > span, .seg button:active, .scale5 button:active { transform: scale(0.97); }
+@media (hover: hover) {
+  .btn:not(:disabled):hover { border-color: var(--ink-faint); }
+  .btn.primary:not(:disabled):hover { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
+  .ticket:hover, .method-tile:hover { border-color: var(--ink-faint); }
+  .tab:not([aria-current="page"]):hover { color: var(--ink); }
+  .chip-choice > span:hover, .tile > span:hover { border-color: var(--ink-faint); }
+}
+
+/* ---------- Edge fade on a scrolling row (static mask, so it costs nothing while scrolling) ----------
+   Fades the right edge only when the row overflows: with room to spare the faded area is empty. */
+.profile-bar { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+
+/* ---------- Skeleton: a soft placeholder shown only when a screen is slow (motion.js withPlaceholder) ---------- */
+.skeleton { display: grid; gap: var(--s3); }
+.skeleton i { display: block; height: 72px; border-radius: var(--r-panel); background: var(--sunken); }
+.skeleton i:first-child { height: 40px; width: 55%; border-radius: var(--r-btn); }
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton { animation: soft-pulse 1.6s ease-in-out infinite; }
+  @keyframes soft-pulse { 50% { opacity: 0.55; } }
+}
+
+/* ---------- Screen changes (View Transitions; motion.js sets <html data-vt="tab|push|pop">) ----------
+   Only the main area is named, so the tab bar stays put. Without the API nothing here runs and the swap is instant. */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-vt] main.view-host { view-transition-name: view; }
+  ::view-transition-group(view) { animation-duration: var(--t-base); animation-timing-function: var(--ease); }
+  ::view-transition-old(view) { animation: vt-out var(--t-exit) var(--ease-in) both; }
+  ::view-transition-new(view) { animation: vt-in var(--t-base) var(--ease) both; }
+  html[data-vt="push"]::view-transition-new(view) { animation-name: vt-in-from-end; }
+  html[data-vt="pop"]::view-transition-new(view) { animation-name: vt-in-from-start; }
+  @keyframes vt-out { to { opacity: 0; } }
+  @keyframes vt-in { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes vt-in-from-end { from { opacity: 0; transform: translateX(16px); } }
+  @keyframes vt-in-from-start { from { opacity: 0; transform: translateX(-16px); } }
+}
+/* the root is not named, so it must not crossfade by itself (default root fade would also fade the tab bar) */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(root) { opacity: 0; }
+
+/* ---------- Touch and tablet ---------- */
+@media (pointer: coarse) {
+  .btn.small, .link { min-height: 44px; }
+  .tab { min-height: var(--target); }
+}
+@media (min-width: 1100px) { :root { --content-max: 1080px; } }
+
 .noscript { padding: var(--s4); }
