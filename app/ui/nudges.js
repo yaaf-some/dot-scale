@@ -1,5 +1,5 @@
 // The Home screen shows at most ONE nudge. Any module can register a source; the highest priority wins.
-//   registerNudge(priority, (data) => nudge | null)
+//   registerNudge(priority, (data) => nudge | null | Promise<nudge | null>)
 //   data  = { store, scale, profile, brews, beans, now, dismissed }   (brews = this profile's, newest first; dismissed = { [nudgeId]: ms })
 //   nudge = { id, tone: 'info' | 'warn', text, action?: { label, href } }
 // Nudges can be dismissed (the id is remembered on this device); 'warn' ones can't. Ids that include a brew or bean id come back
@@ -8,11 +8,24 @@
 const sources = [];
 export function registerNudge(priority, fn) { sources.push({ priority, fn }); sources.sort((a, b) => b.priority - a.priority); }
 
+const usable = (n, dismissed) => n && !(dismissed[n.id] && n.tone !== 'warn');
+
+/** Sources that answer at once. A source that returns a promise (code loaded on demand) is skipped here; see pickNudgeLater(). */
 export function pickNudge(data) {
   const dismissed = data.store?.prefs?.get('nudgeDismissed', {}) ?? {};
   const full = { ...data, dismissed };
   for (const { fn } of sources) {
-    try { const n = fn(full); if (n && !(dismissed[n.id] && n.tone !== 'warn')) return n; } catch (e) { console.error('nudge source failed', e); }
+    try { const n = fn(full); if (n && typeof n.then !== 'function' && usable(n, dismissed)) return n; } catch (e) { console.error('nudge source failed', e); }
+  }
+  return null;
+}
+
+/** The same choice with every source awaited, in priority order. Home paints with pickNudge() first and swaps if this differs. */
+export async function pickNudgeLater(data) {
+  const dismissed = data.store?.prefs?.get('nudgeDismissed', {}) ?? {};
+  const full = { ...data, dismissed };
+  for (const { fn } of sources) {
+    try { const n = await fn(full); if (usable(n, dismissed)) return n; } catch (e) { console.error('nudge source failed', e); }
   }
   return null;
 }

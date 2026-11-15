@@ -6,7 +6,8 @@ import { icon } from '../icons.js';
 import { confirmDialog } from '../dialog.js';
 import { segmented } from '../components.js';
 import { uuid } from '../../core/store.js';
-import { buildBrew, withAnalysis, saveBrew } from '../../core/brew-record.js';
+import { buildBrew, saveBrew } from '../../core/brew-record.js';
+import { withAnalysis } from '../../core/brew-analysis.js';
 import { createChart, pointsFromSamples } from './chart.js';
 
 export const AUTOSAVE_MS = 2 * 60 * 1000;

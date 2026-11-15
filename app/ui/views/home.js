@@ -5,7 +5,7 @@ import { avatar, section, ago } from '../components.js';
 import { scaleLine } from '../scale-line.js';
 import { editProfile } from '../editors.js';
 import { methodById } from '../labels.js';
-import { pickNudge, dismissNudge } from '../nudges.js';
+import { pickNudge, pickNudgeLater, dismissNudge } from '../nudges.js';
 
 export const meta = { title: 'Home' };
 
@@ -58,7 +58,10 @@ export async function mount(root, ctx) {
   const myRecipes = recipes.filter(mine), myBrews = brews.filter(mine);
   const brewable = myBrews.filter((b) => !b.incomplete); // an interrupted shot isn't a recipe to repeat
   const items = brewAgainItems(myRecipes, brewable, beans);
-  const nudge = pickNudge({ store, scale: ctx.scale, profile, brews: myBrews, beans, now: Date.now() });
+  const nudgeData = { store, scale: ctx.scale, profile, brews: myBrews, beans, now: Date.now() };
+  const nudge = pickNudge(nudgeData);
+  let nudgeEl = nudge ? nudgeNode(nudge, store) : null;
+  const line = scaleLine(ctx);
 
   const switcher = h('div', { class: 'profile-bar', role: 'group', 'aria-label': 'Who’s brewing' },
     profiles.map((p) => h('button', { class: 'profile-chip', type: 'button', 'aria-pressed': String(p.id === profile?.id), onclick: () => p.id !== profile?.id && ctx.setProfile(p.id) }, avatar(p), p.name)),
@@ -70,8 +73,8 @@ export async function mount(root, ctx) {
   append(root, [
     switcher,
     h('h1', { class: 'home-title' }, profile ? `${greeting()}, ${profile.name}` : 'Welcome'),
-    scaleLine(ctx),
-    nudge ? nudgeNode(nudge, store) : null,
+    line,
+    nudgeEl,
     items.length
       ? section('Brew again', h('div', { class: 'tickets' }, items.map(ticket)), { id: 'again' })
       : h('a', { class: 'ticket first', href: '#/brew', 'data-testid': 'first-brew' },
@@ -80,4 +83,14 @@ export async function mount(root, ctx) {
         h('div', { class: 'ticket-meta' }, 'Pick a method, check the recipe, and let the scale do the rest.'),
         h('span', { class: 'ticket-go', 'aria-hidden': 'true' }, icon('chevron', { size: 28 }))),
   ]);
+
+  // History-based nudges load their code on demand; if one outranks what is shown, swap it in.
+  if (myBrews.length) {
+    pickNudgeLater(nudgeData).then((better) => {
+      if (ctx.signal.aborted || (better?.id ?? null) === (nudge?.id ?? null)) return;
+      const next = better ? nudgeNode(better, store) : null;
+      if (nudgeEl) { if (next) nudgeEl.replaceWith(next); else nudgeEl.remove(); } else if (next) line.after(next);
+      nudgeEl = next;
+    });
+  }
 }

@@ -11,7 +11,6 @@ import { renderPicker } from '../brew/picker.js';
 import { renderRecipe } from '../brew/recipe.js';
 import { renderPrep } from '../brew/prep.js';
 import { renderLive } from '../brew/live.js';
-import { renderResult } from '../brew/result.js';
 import { createRunner } from '../brew/runner.js';
 import { createWakeLock } from '../brew/wake-lock.js';
 
@@ -29,7 +28,10 @@ const styles = (() => {
   return new Promise((done) => { link.addEventListener('load', done, { once: true }); link.addEventListener('error', done, { once: true }); setTimeout(done, 3000); });
 })();
 
-const SCREENS = { recipe: renderRecipe, prep: renderPrep, live: renderLive, result: renderResult };
+const SCREENS = { recipe: renderRecipe, prep: renderPrep, live: renderLive };
+// The result screen pulls in the insights engine (~47 KB), so it loads on demand. It is requested as soon as a brew is being
+// prepared, long before it is needed, and the offline warm-up (pwa.js) caches it too.
+const loadResult = () => import('../brew/result.js').then((m) => m.renderResult);
 
 export async function mount(root, ctx) {
   await styles;
@@ -64,8 +66,13 @@ export async function mount(root, ctx) {
       setChildren(stage);
       delete stage.dataset.phase; delete stage.dataset.hit;
       const mine = ++renders;
-      const cleanup = SCREENS[name](stage, F);
-      if (mine === renders) stageCleanup = cleanup; else try { cleanup?.(); } catch (e) { console.error(e); } // a screen switched again while rendering
+      const draw = (render) => {
+        const cleanup = render(stage, F);
+        if (mine === renders) stageCleanup = cleanup; else try { cleanup?.(); } catch (e) { console.error(e); } // a screen switched again while rendering
+      };
+      if (name === 'result') loadResult().then((render) => { if (mine === renders) draw(render); }, (e) => { console.error('result screen failed to load', e); ctx.toast('Couldn’t open the result. Check your connection.'); });
+      else draw(SCREENS[name]);
+      if (name === 'prep') loadResult().catch(() => {}); // warm it up; failure is handled when it is really needed
       scrollTo(0, 0);
     },
     /** Abandon the brew: nothing is saved. Back to the recipe. */

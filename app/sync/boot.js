@@ -1,14 +1,21 @@
-// Starts household sync once the store is open (called from app/main.js). It resumes a saved household in the background;
-// without one it does nothing and makes no network request. The Settings → Sync section talks to the same client.
-// Sync is optional: if it cannot start, the app carries on without it.
-import { createSyncClient } from './client.js';
-import { syncStoreAdapter } from './store-adapter.js';
-
-let client = null;
+// Starts household sync (called from app/main.js). The sync client is ~20 KB and most devices never use it, so it is loaded
+// on demand: right away in the background when this device already has a household saved, or when Settings → Sync opens.
+// Without a household it makes no network request. Sync is optional: if it cannot start, the app carries on without it.
+let client = null, loading = null;
 export const getSync = () => client;
 
+// The client keeps its household in localStorage (see STORAGE_KEY in client.js); peek without loading the client.
+function hasSavedHousehold() {
+  try { return !!JSON.parse(globalThis.localStorage?.getItem('dot.sync'))?.code; } catch { return false; }
+}
+
+/** Loads and starts the client (once). Resolves with it, or null when sync is unavailable. */
+export function loadSync(store) {
+  return (loading ??= Promise.all([import('./client.js'), import('./store-adapter.js')])
+    .then(([{ createSyncClient }, { syncStoreAdapter }]) => (client = createSyncClient({ store: syncStoreAdapter(store) }).start()))
+    .catch((e) => { console.error('sync unavailable', e); return null; }));
+}
+
 export function startSync(store) {
-  if (client) return client;
-  try { client = createSyncClient({ store: syncStoreAdapter(store) }).start(); } catch (e) { console.error('sync unavailable', e); }
-  return client;
+  if (hasSavedHousehold()) loadSync(store);
 }

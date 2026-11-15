@@ -15,8 +15,38 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Dot Scale">
-<link rel="stylesheet" href="app/ui/tokens.css">
-<link rel="stylesheet" href="app/ui/app.css">
+<link rel="stylesheet" href="app/ui/tokens.css" fetchpriority="high">
+<link rel="stylesheet" href="app/ui/app.css" fetchpriority="high">
+<!-- Flattens the module waterfall: everything app/main.js and the Home screen import statically, fetched in parallel.
+     test/preload.test.mjs keeps this list in step with the code; regenerate with `node scripts/preload-links.mjs`. -->
+<link rel="modulepreload" href="app/main.js">
+<link rel="modulepreload" href="app/ui/views/home.js">
+<link rel="modulepreload" href="app/core/bootstrap.js">
+<link rel="modulepreload" href="app/core/scale.js">
+<link rel="modulepreload" href="app/core/store.js">
+<link rel="modulepreload" href="app/modules.js">
+<link rel="modulepreload" href="app/pwa.js">
+<link rel="modulepreload" href="app/sync/boot.js">
+<link rel="modulepreload" href="app/ui/components.js">
+<link rel="modulepreload" href="app/ui/dom.js">
+<link rel="modulepreload" href="app/ui/editors.js">
+<link rel="modulepreload" href="app/ui/icons.js">
+<link rel="modulepreload" href="app/ui/labels.js">
+<link rel="modulepreload" href="app/ui/nudges.js">
+<link rel="modulepreload" href="app/ui/router.js">
+<link rel="modulepreload" href="app/ui/scale-line.js">
+<link rel="modulepreload" href="app/ui/theme.js">
+<link rel="modulepreload" href="app/ui/toast.js">
+<link rel="modulepreload" href="app/core/demo-scale.js">
+<link rel="modulepreload" href="app/core/events.js">
+<link rel="modulepreload" href="app/core/seeds.js">
+<link rel="modulepreload" href="app/core/store-adapters.js">
+<link rel="modulepreload" href="app/sync/settings-section.js">
+<link rel="modulepreload" href="app/ui/brew/settings-section.js">
+<link rel="modulepreload" href="app/ui/dialog.js">
+<link rel="modulepreload" href="app/ui/journal-nudges.js">
+<link rel="modulepreload" href="protocol.js">
+<link rel="modulepreload" href="app/ui/settings-sections.js">
 </head>
 <body>
 <div id="shell" class="shell" data-chrome="tabs">
