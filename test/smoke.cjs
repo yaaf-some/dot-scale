@@ -83,6 +83,11 @@ const pw = require('playwright');
     await demo('pump');
     await page.waitForSelector('.brew-stage[data-phase="running"]', { timeout: 15000 });
     check(true, 'espresso timer auto-starts at the first drops');
+    // the stop button must not claim "I stopped the shot" while water is still flowing: absent early, present after the stop cue
+    const pumpBtn = () => page.evaluate(() => { const b = document.querySelector('[data-testid="live-primary"]'); return !!b && !b.hidden && getComputedStyle(b).visibility !== 'hidden' && /I stopped the shot/.test(b.textContent); });
+    check(!(await pumpBtn()), 'espresso: no "I stopped the shot" button early in the shot');
+    await page.waitForFunction(() => { const b = document.querySelector('[data-testid="live-primary"]'); return b && !b.hidden && getComputedStyle(b).visibility !== 'hidden' && /I stopped the shot/.test(b.textContent); }, null, { timeout: 60000 });
+    check(await pumpBtn(), 'espresso: "I stopped the shot" appears with the stop cue');
     await page.waitForSelector('[data-testid="save-brew"]', { timeout: 70000 });
     check((await page.locator('[data-testid="takeaway"]').innerText()).length > 5, 'result shows a takeaway');
     check(await page.locator('[data-testid="try-next"]').count() === 1 && await page.locator('canvas.chart').count() === 1, 'result shows one thing to try and the curve');

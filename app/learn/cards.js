@@ -39,7 +39,7 @@ export const CARDS = [
   {
     id: 'reading-the-numbers', topic: 'basics', methods: ALL,
     title: 'What the numbers mean',
-    body: 'Dose is the dry coffee you put in; yield is the liquid that comes out, both in grams. Ratio is yield divided by dose, so 16 g in and 32 g out is 1:2. Time runs from the moment the pump or the first pour starts. Flow is how many grams per second reach the cup. Together they show how a brew went before you even taste it.',
+    body: 'Dose is the dry coffee you put in; yield is the liquid that comes out, both in grams. Ratio is yield divided by dose, so 16 g in and 32 g out is 1:2. Time runs from the moment the shot or the first pour starts. Flow is how many grams per second reach the cup. Together they show how a brew went before you even taste it.',
   },
   {
     id: 'ratio-and-strength', topic: 'basics', methods: ALL, diagram: RATIO_DIAGRAM,
@@ -69,7 +69,7 @@ export const CARDS = [
   {
     id: 'first-drops', topic: 'espresso', methods: ESP,
     title: 'First drops: your early clue',
-    body: 'First drops is the time from starting the pump until coffee first reaches the cup. The EC260 has no preinfusion control, so a long wait (over about 12 s) often means the puck is too fine or packed too hard. A very short wait (under about 5 s) can mean the grind is too coarse, the dose is low, or water is racing around the puck. Treat it as a clue and read it together with the total time.',
+    body: 'First drops is the time from starting the shot until coffee first reaches the cup. The EC260 has no preinfusion control, so a long wait (over about 12 s) often means the puck is too fine or packed too hard. A very short wait (under about 5 s) can mean the grind is too coarse, the dose is low, or water is racing around the puck. Treat it as a clue and read it together with the total time.',
   },
   {
     id: 'flow-curve', topic: 'espresso', methods: ESP, diagram: FLOW_DIAGRAM,
@@ -104,7 +104,7 @@ export const CARDS = [
   {
     id: 'stop-early', topic: 'espresso', methods: ESP,
     title: 'Why stop before the target',
-    body: 'Coffee keeps dripping for a moment after you stop the pump, because pressure is still draining out of the puck. That is usually a gram or two. To land on 32 g, stop a little before it. Dot Scale learns your typical drip and can cue you early.',
+    body: 'Coffee keeps dripping for a moment after you stop the shot, because pressure is still draining out of the coffee. That is usually a gram or two. To land on 32 g, stop a little before it. Dot Scale learns your typical drip and can cue you early.',
   },
   {
     id: 'blonding', topic: 'espresso', methods: ESP,

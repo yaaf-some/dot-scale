@@ -15,7 +15,7 @@ export function demoActions({ method, recipe, state }) {
     if (state.prepStep === 'water') out.push({ id: 'water', label: `Pour ${recipe.yield} g of water`, do: (d) => d.dispense(recipe.yield, 20) });
   } else if (state.phase === 'ready' || state.phase === 'running') {
     if (kind === 'espresso') {
-      if (state.phase === 'ready' || !state.espresso?.stopCueSent) out.push({ id: 'pump', label: 'Start the pump', do: (d) => { d.setScenario('espresso-1to2'); d.startFlow(); } });
+      if (state.phase === 'ready' || !state.espresso?.stopCueSent) out.push({ id: 'pump', label: 'Start the shot', do: (d) => { d.setScenario('espresso-1to2'); d.startFlow(); } });
     } else if (kind === 'pour') {
       const b = state.brew;
       const target = b?.targetG;
