@@ -7,6 +7,7 @@ import { stepsFor } from '../../methods/index.js';
 import { createChart } from './chart.js';
 import { demoPanel } from './demo-panel.js';
 import { unlockAudio } from './audio.js';
+import { showsManualEnd } from './runner.js';
 
 const ESPRESSO_PHASES = [
   { id: 'waiting', label: 'Waiting' }, { id: 'first-drops', label: 'Pre-infusion' },
@@ -53,8 +54,7 @@ export function renderLive(host, F) {
 
   const primary = h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'live-primary' });
   const tare = h('button', { class: 'btn big', type: 'button', onclick: () => { unlockAudio(); scale.tare(); run.dispatch({ type: 'tare' }); } }, 'Tare');
-  // An espresso shot ends by itself (it detects the flow dropping off), so the manual end is only a quiet fallback, not the main action.
-  const finish = h('button', { class: kind === 'espresso' ? 'btn big quiet' : 'btn big', type: 'button', 'data-testid': 'live-finish', onclick: () => run.dispatch({ type: 'finish' }) }, kind === 'espresso' ? 'End shot now' : 'Done');
+  const finish = h('button', { class: 'btn big', type: 'button', 'data-testid': 'live-finish', onclick: () => run.dispatch({ type: 'finish' }) }, 'Done');
   const cancel = h('button', { class: 'btn quiet', type: 'button', 'data-testid': 'live-cancel', onclick: async () => {
     if (run.state.phase === 'running' && !(await confirmDialog({ title: 'Cancel this brew?', message: 'Nothing will be saved.', confirmLabel: 'Cancel brew', danger: true }))) return;
     if (F.stage === 'live' && run.state.phase !== 'done') F.cancel(); // the shot may have finished while the dialog was open
@@ -109,7 +109,7 @@ export function renderLive(host, F) {
     }
     if (stepCard) paintStep(s, running);
     // buttons
-    setHidden(finish, !running); setHidden(tare, running);
+    setHidden(finish, !running || !showsManualEnd(kind, s.settings)); setHidden(tare, running); // espresso has no Done button: the app detects the end of the shot (Cancel is always there)
     // Only the Start button lives in the primary slot. An espresso shot is ended by the app itself (the flow dropping off is
     // detected from the weight), so nothing asks you to say that the water has stopped; "End shot now" is just the fallback.
     const mode = s.phase === 'ready' ? 'start' : 'none';
