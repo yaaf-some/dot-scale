@@ -86,6 +86,7 @@ const pw = require('playwright');
     // the app detects the end of the shot itself: no button asks "I stopped the shot", before or after the stop cue
     await page.waitForFunction(() => /Stop the shot/.test(document.querySelector('[data-testid="live-cue"]')?.textContent ?? ''), null, { timeout: 60000 });
     check(!(await page.locator('button:has-text("stopped the")').count()), 'espresso: no manual "I stopped…" button, the shot ends by itself');
+    check(await page.locator('[data-testid="live-finish"]:visible').count() === 0 && await page.locator('[data-testid="live-cancel"]:visible').count() === 1, 'espresso: no Done button while running (the shot ends by itself), Cancel is still there');
     await page.waitForSelector('[data-testid="save-brew"]', { timeout: 70000 });
     check((await page.locator('[data-testid="takeaway"]').innerText()).length > 5, 'result shows a takeaway');
     check(await page.locator('[data-testid="try-next"]').count() === 1 && await page.locator('canvas.chart').count() === 1, 'result shows one thing to try and the curve');
