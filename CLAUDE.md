@@ -8,6 +8,8 @@ no dependencies. Hosted on **Cloudflare** (Worker + static assets) at https://co
 ## Read first
 - **`docs/PRODUCT.md`** is the product spec and the contracts between modules (data model, insights, sync). Follow it;
   change it in your PR if it's wrong.
+- `docs/SYNC.md` (household sync), `docs/DEPLOY.md` (Cloudflare operations) and `docs/PASSKEYS.md` (the Face ID sign-in design; not built
+  beyond the support probe) when you touch sync, hosting or auth.
 - UI work: use the **frontend-design** skill (visual identity) and the **modern-web-guidance** skill (platform patterns),
   both in `.claude/skills/`.
 - Primary devices are **iPhone/iPad in Bluefy (WebKit)**. Every feature must work in WebKit, with fallbacks for anything

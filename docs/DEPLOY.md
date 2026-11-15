@@ -92,7 +92,9 @@ Sync is optional and separate from hosting: until you turn it on, the app shows 
    npx wrangler secret put SYNC_PEPPER    # paste it when asked
    ```
    (If wrangler says the Worker doesn't exist yet, deploy once first.) No terminal? Dashboard → **Workers & Pages → dot-scale →
-   Settings → Variables and Secrets → Add**, type **Secret**, name `SYNC_PEPPER`. Secrets persist across deploys. Keep a copy in
+   Settings → Variables and Secrets → Add**, type **Secret**, name `SYNC_PEPPER`. Secrets persist across deploys. **Use the Worker's
+   runtime "Variables and secrets", not the similarly named block under Settings → Build** (that one only exists while a build runs, so
+   the Worker never sees it), and not Preview settings. Keep a copy in
    your password manager: **if you ever change or lose it, existing households can no longer be found** and must be recreated
    (so set it before anyone creates a household).
    For local development put it in a git-ignored `.dev.vars` file (`SYNC_PEPPER=...`), never in a tracked file.
@@ -122,19 +124,21 @@ Bluetooth flow. It is an optional later step if you ever want the whole site pri
 
 ## 6. What has and has not been checked
 
-Checked against the real Cloudflare deployment (November 2026): the first production build and deploy; the app and its service
-worker served over HTTPS on the Worker address and the custom domain; every security header present on the real edge; the private
-files in section 1 returning 404; `/api/sync` answering `sync_not_configured` while no database is bound; branch preview builds
-(including the `previews` block fix).
+Checked against the real Cloudflare deployment (November 2026): production builds and deploys from `main`; the app and its service
+worker served over HTTPS on the Worker address and the custom domain; every security header on the real edge; the private files in
+section 1 returning 404; branch preview builds (including the `previews` block fix); the D1 database bound to the Worker with its
+three tables created; `SYNC_PEPPER` set as a runtime secret; and `/api/sync` answering `missing_code` (the API is live) instead of
+`sync_not_configured`. The owner has also confirmed on an iPhone in Bluefy that the app opens and connects to the real scale.
 
-Checked locally only: `wrangler dev --local` (workerd with a local D1), where the real migration applied and the real sync client
-created a household, pushed large brews in chunks, joined a second device and converged (edit and delete), with no codes or tokens in
-the log; the sync tests, which run the real storage code and migration on in-memory SQLite behind a small D1-API shim (see
-`docs/SYNC.md`); and the Demo-mode browser test (Chromium) under the real CSP, with no violations (a deliberately stricter CSP does
-produce violations, so the check can fail). `npm test` includes `test/hosting.test.mjs`, which guards `.assetsignore`, `_headers`
-and `wrangler.jsonc`.
+Checked in CI on every PR: unit tests and the Demo-mode browser test in **Chromium and in WebKit** (Playwright's WebKit, the engine
+Bluefy uses) under the real CSP, with no violations (a deliberately stricter CSP does produce violations, so the check can fail).
+`npm test` includes `test/hosting.test.mjs`, which guards `.assetsignore`, `_headers` and `wrangler.jsonc`. Locally, `wrangler dev
+--local` (workerd with a local D1) ran the real migration and the real sync client end to end: create a household, push large brews
+in chunks, join a second device and converge (edit and delete), with no codes or tokens in the log.
 
-**Not checked:** sync against a **remote D1** (latency, quotas, error behaviour, and `db.batch()` atomicity exactly as documented,
-which the merge relies on); `CF-Connecting-IP` being present in production (rate limits share one bucket without it); the Workers
-Free plan's 50-queries-per-request assumption behind the 15-records-per-push cap (worst case measured on SQLite: 38 statements);
-a real scale connection and a real brew on the Cloudflare address under the production headers (the CSP and the Permissions-Policy that allows Bluetooth); and iPhone/iPad in Bluefy (WebKit): only Chromium has been run.
+**Not checked:** a household created and joined across two real devices against the **remote D1** (latency, quotas, error behaviour,
+and `db.batch()` atomicity exactly as documented, which the merge relies on); `CF-Connecting-IP` being present in production (rate
+limits share one bucket without it); the Workers Free plan's 50-queries-per-request assumption behind the 15-records-per-push cap
+(worst case measured on SQLite: 38 statements); a full brew on the Cloudflare address in Bluefy under the production headers; and
+passkeys on real devices (the Settings → Sync probe is the first check, see `docs/PASSKEYS.md`). Playwright's WebKit is not Bluefy
+itself.
