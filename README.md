@@ -14,6 +14,16 @@ without a scale.
 
 Bluetooth runs between the scale and whatever device has the page open, so no computer needs to stay on.
 
+### Trouble connecting on iPhone or iPad?
+
+- **Don't connect the scale in iOS Settings → Bluetooth.** Web Bluetooth does not use that pairing, and a scale that is already
+  connected to the phone (or to the Timemore app) can't be found by Bluefy. Close the Timemore app, and if the scale is listed under
+  Settings → Bluetooth, tap it and choose **Forget This Device**. Then switch the scale on and press **Connect** in the app.
+- **The scale talks to one device at a time.** Disconnect it from any other phone, tablet or computer first.
+- **"Request payload could not be parsed"** comes from Bluefy itself. The app sends only full-length Bluetooth IDs and, if the browser
+  still rejects the request, tries simpler requests automatically (down to listing every nearby Bluetooth device, where you pick the
+  scale by name). **Settings → Advanced → Debug log** shows which request worked. Update Bluefy to its latest version too.
+
 ## What it does
 
 - **Brew:** espresso, pour-over, French press, AeroPress, moka pot and Wacaco Prestina. Pick a method, check the recipe, and the app

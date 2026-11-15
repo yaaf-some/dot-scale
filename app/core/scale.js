@@ -26,17 +26,44 @@ const withTimeout = (p, ms, what) => {
 const CMD_NAMES = Object.fromEntries(Object.entries(CMD).map(([k, v]) => [v, k.toLowerCase()]));
 const RETRY_DELAYS = [1000, 2000, 3000, 5000, 8000, 13000];
 
-export const BLE_FILTERS = [
-  { services: [SERVICE] }, { namePrefix: 'TIMEMORE' }, { namePrefix: 'Timemore' }, { namePrefix: 'DOT' }, { namePrefix: 'Dot' },
+/**
+ * A 16-bit Bluetooth UUID as the canonical 128-bit string. Both forms are valid Web Bluetooth, but Bluefy (iOS) fails with
+ * "Request payload could not be parsed" on bare numbers like 0xfff0, so the app only ever sends the string form.
+ */
+export const uuid16 = (n) => `0000${n.toString(16).padStart(4, '0')}-0000-1000-8000-00805f9b34fb`;
+const U = {
+  service: uuid16(SERVICE), notify: uuid16(CHAR_NOTIFY), write: uuid16(CHAR_WRITE),
+  info: uuid16(DEVICE_INFO), model: uuid16(0x2a24), maker: uuid16(0x2a29),
+};
+
+const NAME_FILTERS = [{ namePrefix: 'TIMEMORE' }, { namePrefix: 'Timemore' }, { namePrefix: 'DOT' }, { namePrefix: 'Dot' }];
+export const BLE_FILTERS = [{ services: [U.service] }, ...NAME_FILTERS];
+const OPTIONAL = [U.service, U.info];
+
+/**
+ * Device-chooser requests, most specific first. If a browser rejects the request itself (not the user, and not "no device
+ * found"), the next, simpler one is tried; the one that works is remembered in prefs (`bleRequest`, an index into this list).
+ * The last one shows every Bluetooth device, so the scale can still be picked by name.
+ */
+export const REQUESTS = [
+  { id: 'full', options: { filters: BLE_FILTERS, optionalServices: OPTIONAL } },
+  { id: 'service', options: { filters: [{ services: [U.service] }], optionalServices: OPTIONAL } },
+  { id: 'name', options: { filters: NAME_FILTERS, optionalServices: OPTIONAL } },
+  { id: 'all', options: { acceptAllDevices: true, optionalServices: OPTIONAL } },
 ];
+const NOT_A_REQUEST_PROBLEM = new Set(['NotFoundError', 'NotAllowedError', 'SecurityError', 'AbortError', 'NetworkError', 'InvalidStateError']);
+const REQUEST_PROBLEM = /payload|pars(e|ing)|invalid|malformed|not supported|unsupported|argument/i;
+/** True when the browser refused the request's shape, as opposed to the user cancelling or no device matching. */
+export const isRequestProblem = (e) => !NOT_A_REQUEST_PROBLEM.has(e?.name)
+  && (REQUEST_PROBLEM.test(e?.message || '') || ['TypeError', 'NotSupportedError', 'SyntaxError', 'DataError', 'OperationError'].includes(e?.name));
 
 async function openBle(device, onBytes) {
   const server = await device.gatt.connect();
   let notify, writeChar;
   try {
-    const svc = await server.getPrimaryService(SERVICE);
-    notify = await svc.getCharacteristic(CHAR_NOTIFY);
-    writeChar = await svc.getCharacteristic(CHAR_WRITE);
+    const svc = await server.getPrimaryService(U.service);
+    notify = await svc.getCharacteristic(U.notify);
+    writeChar = await svc.getCharacteristic(U.write);
     notify.addEventListener('characteristicvaluechanged', (e) => {
       const v = e.target.value;
       onBytes(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
@@ -53,9 +80,9 @@ async function openBle(device, onBytes) {
       else await writeChar.writeValue(bytes);
     },
     async readInfo() {
-      const info = await server.getPrimaryService(DEVICE_INFO);
+      const info = await server.getPrimaryService(U.info);
       const read = async (uuid) => new TextDecoder().decode(await (await info.getCharacteristic(uuid)).readValue());
-      const [model, maker] = await Promise.all([read(0x2a24).catch(() => '?'), read(0x2a29).catch(() => '?')]);
+      const [model, maker] = await Promise.all([read(U.model).catch(() => '?'), read(U.maker).catch(() => '?')]);
       return { model, maker };
     },
     disconnect() { device.gatt.disconnect(); },
@@ -195,6 +222,30 @@ export function createScale({ bluetooth = globalThis.navigator?.bluetooth, prefs
     if (mySession === session) setStatus('disconnected', 'Disconnected', null);
   }
 
+  /** Opens the chooser. Starts at the request that worked last time and falls back to simpler ones if the browser rejects it. */
+  async function requestScale() {
+    const saved = prefs?.get('bleRequest', 0);
+    const first = Number.isInteger(saved) ? Math.min(Math.max(saved, 0), REQUESTS.length - 1) : 0;
+    let lastError;
+    for (let i = first; i < REQUESTS.length; i++) {
+      try {
+        const dev = await bluetooth.requestDevice(REQUESTS[i].options);
+        prefs?.set('bleRequest', i);
+        if (i > 0) log(`Chooser request "${REQUESTS[i].id}" worked.`);
+        return dev;
+      } catch (e) {
+        lastError = e;
+        if (!isRequestProblem(e)) throw e;
+        const next = REQUESTS[i + 1];
+        log(`The browser rejected the "${REQUESTS[i].id}" chooser request (${e.message})${next ? `; trying "${next.id}"` : ''}.`);
+        // Remember how far we got, so another tap on Connect starts at the next request even if this call can't carry on
+        // (some browsers only allow a chooser right after a tap).
+        if (next) prefs?.set('bleRequest', i + 1);
+      }
+    }
+    throw lastError;
+  }
+
   const scale = {
     state, logLines,
     on: events.on.bind(events),
@@ -210,7 +261,7 @@ export function createScale({ bluetooth = globalThis.navigator?.bluetooth, prefs
       const mySession = ++session;
       try {
         setStatus('connecting', 'Choose your scale…', 'ble');
-        const dev = await bluetooth.requestDevice({ filters: BLE_FILTERS, optionalServices: [SERVICE, DEVICE_INFO] });
+        const dev = await requestScale();
         await openDevice(dev, mySession);
         prefs?.set('knownScale', { id: dev.id, name: dev.name });
       } catch (e) {

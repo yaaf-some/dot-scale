@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createScale } from '../app/core/scale.js';
+import { createScale, uuid16, REQUESTS, isRequestProblem } from '../app/core/scale.js';
 import { createDemoTransport, SCENARIOS } from '../app/core/demo-scale.js';
 import { Parser, commands, hex } from '../protocol.js';
 
@@ -76,9 +76,12 @@ test('espresso scenario: nothing for 7 s, then flow ~1.25 g/s', () => {
   assert.equal(SCENARIOS.espresso(15), 1.25);
 });
 
-function fakeBluetooth({ failFirst = 0 } = {}) {
-  const demoParser = new Parser();
+// A strict stand-in for Web Bluetooth. Like Bluefy (iOS), it refuses bare-number UUIDs; `requestError(options, n)` lets a test make
+// the chooser request itself fail (n counts calls from 1).
+function fakeBluetooth({ failFirst = 0, requestError = null } = {}) {
   let notifyHandler, connects = 0;
+  const requests = [];
+  const mustBeString = (u) => { if (typeof u !== 'string') throw new TypeError(`UUID must be a string, got ${typeof u}`); };
   const device = {
     id: 'dev-1', name: 'TIMEMORE DOT', listeners: {},
     addEventListener(type, fn) { this.listeners[type] = fn; },
@@ -86,15 +89,21 @@ function fakeBluetooth({ failFirst = 0 } = {}) {
       async connect() {
         if (connects++ < failFirst) throw new Error('out of range');
         const chars = {
-          0xfff1: { addEventListener: (_, fn) => { notifyHandler = fn; }, startNotifications: async () => {} },
-          0xfff2: { writeValueWithoutResponse: async () => {} },
+          [uuid16(0xfff1)]: { addEventListener: (_, fn) => { notifyHandler = fn; }, startNotifications: async () => {} },
+          [uuid16(0xfff2)]: { writeValueWithoutResponse: async () => {} },
         };
-        return { getPrimaryService: async () => ({ getCharacteristic: async (u) => chars[u] }) };
+        return { getPrimaryService: async (s) => { mustBeString(s); return { getCharacteristic: async (u) => { mustBeString(u); return chars[u]; } }; } };
       },
       disconnect() { device.listeners.gattserverdisconnected?.(); },
     },
   };
-  return { device, get connects() { return connects; }, bluetooth: { requestDevice: async () => device, getDevices: async () => [device] }, notify: (bytes) => notifyHandler({ target: { value: new DataView(bytes.buffer) } }) };
+  const requestDevice = async (options) => {
+    requests.push(options);
+    const err = requestError?.(options, requests.length);
+    if (err) throw err;
+    return device;
+  };
+  return { device, requests, get connects() { return connects; }, bluetooth: { requestDevice, getDevices: async () => [device] }, notify: (bytes) => notifyHandler({ target: { value: new DataView(bytes.buffer) } }) };
 }
 
 test('BLE: connect remembers the known scale, then auto-reconnects after a drop', async () => {
@@ -161,4 +170,72 @@ test('BLE: autoConnect does not reconnect after a deliberate disconnect', async 
   await scale.disconnect();
   assert.equal(await scale.autoConnect(), false);
   assert.equal(scale.state.status, 'disconnected');
+});
+
+// ---- Bluefy (iOS): "Request payload could not be parsed" --------------------------------------------------------------
+const payloadError = () => new Error('(11) RequestDevice: Request payload could not be parsed.');
+const memoryPrefs = () => { const saved = {}; return { saved, get: (k, d) => saved[k] ?? d, set: (k, v) => { saved[k] = v; } }; };
+
+test('uuid16 builds the canonical 128-bit string', () => {
+  assert.equal(uuid16(0xfff0), '0000fff0-0000-1000-8000-00805f9b34fb');
+  assert.equal(uuid16(0x2a24), '00002a24-0000-1000-8000-00805f9b34fb');
+});
+
+test('BLE: every UUID sent to the browser is a canonical string, never a bare number', async () => {
+  const fb = fakeBluetooth();
+  const scale = createScale({ bluetooth: fb.bluetooth, prefs: memoryPrefs(), sleep: instant });
+  await scale.connect();
+  assert.equal(scale.state.status, 'connected'); // the strict fake would throw on a numeric GATT UUID
+  const uuids = fb.requests.flatMap((o) => [...(o.optionalServices ?? []), ...(o.filters ?? []).flatMap((f) => f.services ?? [])]);
+  assert.ok(uuids.length >= 3);
+  for (const u of uuids) assert.match(u, /^[0-9a-f]{8}-0000-1000-8000-00805f9b34fb$/);
+});
+
+test('BLE: a chooser request the browser cannot parse falls back to simpler ones, and the one that works is remembered', async () => {
+  const prefs = memoryPrefs();
+  const fb = fakeBluetooth({ requestError: (_, n) => (n <= 2 ? payloadError() : null) }); // rejects "full" and "service"
+  const scale = createScale({ bluetooth: fb.bluetooth, prefs, sleep: instant });
+  await scale.connect();
+  assert.equal(scale.state.status, 'connected');
+  assert.equal(fb.requests.length, 3);
+  assert.deepEqual(fb.requests[2].filters, REQUESTS[2].options.filters, 'third attempt is the name-only request');
+  assert.equal(prefs.saved.bleRequest, 2);
+  assert.ok(scale.logLines.some((l) => /rejected the "full" chooser request/.test(l.text)), 'the debug log says what happened');
+  // next session starts at the request that worked
+  const fb2 = fakeBluetooth({ requestError: (opts) => (opts.filters ? payloadError() : null) });
+  const scale2 = createScale({ bluetooth: fb2.bluetooth, prefs, sleep: instant });
+  await scale2.connect();
+  assert.equal(fb2.requests.length, 2, 'starts at "name", then "all"');
+  assert.equal(fb2.requests[1].acceptAllDevices, true);
+  assert.equal(prefs.saved.bleRequest, 3);
+});
+
+test('BLE: the user cancelling the chooser, or no device matching, does not trigger a fallback', async () => {
+  const fb = fakeBluetooth({ requestError: () => Object.assign(new Error('User cancelled the requestDevice() chooser.'), { name: 'NotFoundError' }) });
+  const scale = createScale({ bluetooth: fb.bluetooth, prefs: memoryPrefs(), sleep: instant });
+  await scale.connect();
+  assert.equal(fb.requests.length, 1);
+  assert.equal(scale.state.status, 'disconnected');
+  assert.equal(scale.state.text, 'Not connected');
+});
+
+test('BLE: when every request is rejected the failure is reported, and the next tap carries on from where this one stopped', async () => {
+  const prefs = memoryPrefs();
+  const fb = fakeBluetooth({ requestError: () => payloadError() });
+  const errors = [];
+  const scale = createScale({ bluetooth: fb.bluetooth, prefs, sleep: instant });
+  scale.on('error', (e) => errors.push(e.message));
+  await scale.connect();
+  assert.equal(fb.requests.length, REQUESTS.length);
+  assert.equal(scale.state.status, 'disconnected');
+  assert.match(errors[0], /could not be parsed/);
+  assert.equal(prefs.saved.bleRequest, REQUESTS.length - 1);
+});
+
+test('isRequestProblem tells a rejected request from a cancel or a permission problem', () => {
+  assert.equal(isRequestProblem(payloadError()), true);
+  assert.equal(isRequestProblem(new TypeError('bad filters')), true);
+  for (const name of ['NotFoundError', 'NotAllowedError', 'SecurityError', 'AbortError']) {
+    assert.equal(isRequestProblem(Object.assign(new Error('Request payload could not be parsed'), { name })), false, name);
+  }
 });
