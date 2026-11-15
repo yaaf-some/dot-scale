@@ -3,6 +3,8 @@ name: CI
 # Runs on every pull request and on pushes to main. Same checks as `npm run check` locally.
 # Public repo: only the `pull_request` trigger (forks get a read-only token and no secrets). Never switch this to
 # `pull_request_target`, and never add secrets to a job that runs PR code.
+# No `paths` filters: a required check that is skipped stays pending and blocks merging.
+# CI runs Node 27 (alpha, exact pin in .github/actions/node27). Local minimum is Node 22.13+ (node:sqlite).
 on:
   pull_request:
   push:
@@ -15,21 +17,49 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PLAYWRIGHT_VERSION: 1.63.0
+
 jobs:
+  # Keep this job's id and name: it may be a required status check.
   check:
     name: check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
+      - uses: ./.github/actions/node27
       - name: Unit tests
         run: npm test
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-chromium
       - name: Install browser for the smoke test
         run: |
-          npm install --no-save --no-package-lock playwright@1.63.0
+          npm install --no-save --no-package-lock playwright@${PLAYWRIGHT_VERSION}
           npx playwright install --with-deps chromium
-      - name: Smoke test (Demo mode in a real browser)
+      - name: Smoke test (Demo mode in Chromium)
         run: npm run smoke
+
+  # The owner's iPhone/iPad (Bluefy) is WebKit. Runs in parallel with `check`. Web Bluetooth does not exist in WebKit;
+  # the smoke test uses Demo mode, so that is fine.
+  webkit:
+    name: webkit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/node27
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-webkit
+      - name: Install WebKit
+        run: |
+          npm install --no-save --no-package-lock playwright@${PLAYWRIGHT_VERSION}
+          npx playwright install --with-deps webkit
+      - name: Smoke test (Demo mode in WebKit)
+        run: BROWSER=webkit npm run smoke

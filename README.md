@@ -49,7 +49,7 @@ The app is plain static files with no build step, plus one small Worker for the 
 
 ```bash
 npm run serve      # local server on http://localhost:8737 (Web Bluetooth needs localhost or https)
-npm test           # unit tests (Node 22.13+; the sync tests use the built-in node:sqlite)
+npm test           # unit tests (Node 22.13+ locally, CI runs a Node 27 alpha; the sync tests use the built-in node:sqlite)
 npm run smoke      # browser test through Demo mode (Playwright)
 npm run check      # both; run before every push
 ```

@@ -1,13 +1,13 @@
 // Browser smoke test: serves the app and drives the new shell through Demo mode. Fails on any page error.
 // Uses the preinstalled Playwright (cloud sessions) or a local `npm i -g playwright`.
-// Set SMOKE_BROWSER=webkit to run in WebKit (needs `npx playwright install webkit`).
+// Set BROWSER=webkit (or SMOKE_BROWSER) to run in WebKit (needs `npx playwright install webkit`).
 const pw = require('playwright');
 
 (async () => {
   const { start } = await import('../scripts/serve.mjs');
   const server = await start(0);
   const url = `http://127.0.0.1:${server.address().port}/`;
-  const browser = await pw[process.env.SMOKE_BROWSER || 'chromium'].launch();
+  const browser = await pw[process.env.BROWSER || process.env.SMOKE_BROWSER || 'chromium'].launch();
   const errors = [];
   const track = (page) => {
     page.on('pageerror', (e) => errors.push(e.message));
@@ -357,7 +357,9 @@ const pw = require('playwright');
     // A file the page never loaded (stands in for a new app/ module) is cached the first time it's fetched.
     await off.evaluate(() => fetch('icons/icon-512.png').then((r) => r.blob()));
     await off.waitForFunction(async () => !!(await caches.match('icons/icon-512.png')), null, { timeout: 5000, polling: 100 });
-    await ctx.setOffline(true);
+    // Playwright's setOffline in WebKit also fails requests the service worker would answer from cache, so there the
+    // server is stopped instead: the same "no network" from the page's point of view.
+    if (process.env.BROWSER === 'webkit' || process.env.SMOKE_BROWSER === 'webkit') { server.closeAllConnections(); await new Promise((ok) => server.close(ok)); } else await ctx.setOffline(true);
     await off.reload();
     await off.waitForSelector('.onboard', { timeout: 8000 });
     check(true, 'app shell and modules load while offline');
