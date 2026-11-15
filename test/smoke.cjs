@@ -49,16 +49,30 @@ const pw = require('playwright');
     check(await page.locator('.scale-line[data-status="connected"]').count() === 1, 'demo scale shows as connected on Home');
 
     // ---- motion: toasts and dialogs leave through data-leaving, then really close (instant under reduced motion) ----
-    await page.evaluate(async () => { const m = await import('/app/ui/dialog.js'); window.__dv = 'pending'; m.confirmDialog({ title: 'Sure?', message: 'Test', confirmLabel: 'Yes' }).then((v) => (window.__dv = v)); });
+    // A timeout here names which wait failed and dumps the relevant DOM state, so a flake on CI is diagnosable from the log.
+    const motionState = () => page.evaluate(() => JSON.stringify({
+      t: Math.round(performance.now()), vis: document.visibilityState, active: document.activeElement?.tagName, events: window.__motionEv,
+      reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      dialogs: [...document.querySelectorAll('dialog')].map((d) => ({ open: d.open, leaving: d.hasAttribute('data-leaving'), rv: d.returnValue })),
+      toasts: [...document.querySelectorAll('.toast')].map((t) => ({ leaving: t.hasAttribute('data-leaving'), text: t.textContent })),
+    })).catch((e) => `no state (${e.message})`);
+    const motionWait = async (label, fn, timeout) => {
+      try { await page.waitForFunction(fn, null, { timeout }); } catch (e) { throw new Error(`${label} timed out: ${await motionState()}`); }
+    };
+    await page.evaluate(async () => {
+      window.__motionEv = [];
+      for (const t of ['cancel', 'close']) document.addEventListener(t, (e) => window.__motionEv.push(`${t}@${Math.round(performance.now())}`), true);
+      const m = await import('/app/ui/dialog.js'); window.__dv = 'pending'; m.confirmDialog({ title: 'Sure?', message: 'Test', confirmLabel: 'Yes' }).then((v) => (window.__dv = v));
+    });
     await page.waitForSelector('dialog.sheet[open]');
     // Escape goes to the focused element: wait until showModal has moved focus into the dialog (slow CI runners, WebKit).
-    await page.waitForFunction(() => document.querySelector('dialog')?.contains(document.activeElement), null, { timeout: 3000 });
+    await motionWait('focus moves into the dialog', () => document.querySelector('dialog')?.contains(document.activeElement), 3000);
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.querySelector('dialog'), null, { timeout: 2000 });
+    await motionWait('Escape closes the dialog', () => !document.querySelector('dialog'), 2000);
     check((await page.evaluate(() => window.__dv)) === false, 'Escape closes a dialog (after its exit animation) and resolves as dismissed');
     await page.evaluate(async () => { (await import('/app/ui/toast.js')).toast('Saved', { ms: 300 }); });
     await page.waitForSelector('.toast');
-    await page.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 2000 });
+    await motionWait('the toast removes itself', () => !document.querySelector('.toast'), 2000);
     check(true, 'a toast shows and then removes itself');
 
     // ---- Brew: method picker -> recipe -> prep -> live -> result -> saved Brew (espresso, through Demo mode) ----
