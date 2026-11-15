@@ -68,7 +68,7 @@
 .live-stats b { font-size: var(--step-4); font-size: clamp(2.5rem, 11cqi, 5rem); color: var(--ink); font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; }
 .live-stats span:last-child b { font-size: var(--step-3); font-size: clamp(1.75rem, 6cqi, 3rem); }
 .progress { height: 18px; border-radius: var(--r-chip); background: var(--sunken); overflow: hidden; border: 1px solid var(--line); }
-.progress i { display: block; height: 100%; width: 100%; background: var(--cobalt); transform: scaleX(var(--p, 0)); transform-origin: left center; transition: transform var(--t-fast) linear, background var(--t-base); } /* compositor-only: --p is a 0..1 ratio */
+.progress i { display: block; height: 100%; width: 100%; background: var(--cobalt); border-radius: 0 var(--r-chip) var(--r-chip) 0; transform: translateX(calc((var(--p, 0) - 1) * 100%)); transition: background var(--t-base); } /* --p is a 0..1 ratio. translate (not scale) keeps the rounded end true; the track clips the left. No transform transition: it cost ~5x the style recalcs on the live screen and the 1% steps are already smooth */
 .progress-text { text-align: center; color: var(--ink-soft); font-variant-numeric: tabular-nums; min-height: 1.5em; }
 .brew-stage[data-hit] .progress i { background: var(--crema); }
 
@@ -86,7 +86,7 @@
 canvas.chart { display: block; width: 100%; height: 160px; }
 .chart-wrap.tall canvas.chart { height: 200px; }
 .live-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s3); }
-.live-actions .btn { min-height: var(--target-live); }
+.live-actions .btn { min-height: var(--target-live); padding: 0 var(--s3); white-space: normal; line-height: 1.2; text-align: center; }
 
 @media (prefers-reduced-motion: no-preference) {
   .brew-stage[data-enter] { animation: stage-in var(--t-base) var(--ease) backwards; }

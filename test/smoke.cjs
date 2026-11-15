@@ -83,6 +83,9 @@ const pw = require('playwright');
     await demo('pump');
     await page.waitForSelector('.brew-stage[data-phase="running"]', { timeout: 15000 });
     check(true, 'espresso timer auto-starts at the first drops');
+    // the app detects the end of the shot itself: no button asks "I stopped the shot", before or after the stop cue
+    await page.waitForFunction(() => /Stop the shot/.test(document.querySelector('[data-testid="live-cue"]')?.textContent ?? ''), null, { timeout: 60000 });
+    check(!(await page.locator('button:has-text("stopped the")').count()), 'espresso: no manual "I stopped…" button, the shot ends by itself');
     await page.waitForSelector('[data-testid="save-brew"]', { timeout: 70000 });
     check((await page.locator('[data-testid="takeaway"]').innerText()).length > 5, 'result shows a takeaway');
     check(await page.locator('[data-testid="try-next"]').count() === 1 && await page.locator('canvas.chart').count() === 1, 'result shows one thing to try and the curve');

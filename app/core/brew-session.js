@@ -322,7 +322,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
       e.stopCue = true;
       e.phase = 'finishing';
       emit('espresso:phase', { phase: 'finishing' });
-      cue('espresso:stop', 'Stop the pump', { grams: round(s.g, 1), targetG: targetYield, leadG: stopLead() });
+      cue('espresso:stop', 'Stop the shot', { grams: round(s.g, 1), targetG: targetYield, leadG: stopLead() });
     }
 
     // pump stop = flow collapsing from its recent peak (the 0.6 s slope lags, so back-date a little)
@@ -347,7 +347,7 @@ export function createBrewSession({ method, recipe, history = [], settings = {},
     }
     if (!near && !e.stallCue && quiet >= cfg.stallCueS) {
       e.stallCue = true;
-      cue('espresso:stall', 'Flow has stopped. Check the puck, or stop the pump', { grams: round(s.g, 1) });
+      cue('espresso:stall', 'Coffee has stopped flowing. Check the grounds, or stop the shot', { grams: round(s.g, 1) });
     }
   }
 

@@ -9,11 +9,11 @@ import { demoPanel } from './demo-panel.js';
 import { unlockAudio } from './audio.js';
 
 const ESPRESSO_PHASES = [
-  { id: 'waiting', label: 'Waiting' }, { id: 'first-drops', label: 'First drops' },
+  { id: 'waiting', label: 'Waiting' }, { id: 'first-drops', label: 'Pre-infusion' },
   { id: 'main-flow', label: 'Main flow' }, { id: 'finishing', label: 'Finishing' },
 ];
 const READY_TEXT = {
-  espresso: (auto) => (auto ? 'Ready. Start the pump; the timer starts by itself at the first drops' : 'Ready. Tap Start with the pump'),
+  espresso: (auto) => (auto ? 'Ready. Start your machine; the timer starts by itself when pre-infusion begins' : 'Ready. Tap Start at the moment you start your machine'),
   pour: (auto, F) => `Ready. Start pouring the bloom${F.firstTarget ? ` to ${fmtG(F.firstTarget)} g` : ''}`,
   immersion: () => 'Ready. Pour in the water',
   moka: () => 'Ready. Put it on the heat, then tap Start',
@@ -53,7 +53,8 @@ export function renderLive(host, F) {
 
   const primary = h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'live-primary' });
   const tare = h('button', { class: 'btn big', type: 'button', onclick: () => { unlockAudio(); scale.tare(); run.dispatch({ type: 'tare' }); } }, 'Tare');
-  const finish = h('button', { class: 'btn big', type: 'button', 'data-testid': 'live-finish', onclick: () => run.dispatch({ type: 'finish' }) }, 'Done');
+  // An espresso shot ends by itself (it detects the flow dropping off), so the manual end is only a quiet fallback, not the main action.
+  const finish = h('button', { class: kind === 'espresso' ? 'btn big quiet' : 'btn big', type: 'button', 'data-testid': 'live-finish', onclick: () => run.dispatch({ type: 'finish' }) }, kind === 'espresso' ? 'End shot now' : 'Done');
   const cancel = h('button', { class: 'btn quiet', type: 'button', 'data-testid': 'live-cancel', onclick: async () => {
     if (run.state.phase === 'running' && !(await confirmDialog({ title: 'Cancel this brew?', message: 'Nothing will be saved.', confirmLabel: 'Cancel brew', danger: true }))) return;
     if (F.stage === 'live' && run.state.phase !== 'done') F.cancel(); // the shot may have finished while the dialog was open
@@ -73,7 +74,7 @@ export function renderLive(host, F) {
     if (s.phase === 'ready') return READY_TEXT[kind](s.settings.autoStart, F);
     if (kind === 'espresso') {
       const e = s.espresso;
-      return { waiting: 'Waiting for the first drops', 'first-drops': 'First drops', 'main-flow': 'Main flow', finishing: 'Stop the pump' }[e?.phase] ?? 'Running';
+      return { waiting: 'Waiting for pre-infusion', 'first-drops': 'Pre-infusion', 'main-flow': 'Main flow', finishing: 'Stop the shot' }[e?.phase] ?? 'Running';
     }
     return s.brew?.step?.label ?? 'Running';
   };
@@ -109,12 +110,13 @@ export function renderLive(host, F) {
     if (stepCard) paintStep(s, running);
     // buttons
     setHidden(finish, !running); setHidden(tare, running);
-    const mode = s.phase === 'ready' ? 'start' : kind === 'espresso' ? 'pump' : 'none';
+    // Only the Start button lives in the primary slot. An espresso shot is ended by the app itself (the flow dropping off is
+    // detected from the weight), so nothing asks you to say that the water has stopped; "End shot now" is just the fallback.
+    const mode = s.phase === 'ready' ? 'start' : 'none';
     if (mode !== primaryMode) { // label and handler only change when the mode does
       primaryMode = mode;
       setHidden(primary, mode === 'none');
-      if (mode === 'start') { primary.textContent = kind === 'espresso' ? 'Start timer (pump on)' : 'Start timer'; primary.onclick = () => { unlockAudio(); run.dispatch({ type: 'start' }); }; primary.disabled = false; }
-      else if (mode === 'pump') { primary.textContent = 'Pump stopped'; primary.onclick = () => run.dispatch({ type: 'pumpOff' }); primary.disabled = false; }
+      if (mode === 'start') { primary.textContent = kind === 'espresso' ? 'Start timer (machine on)' : 'Start timer'; primary.onclick = () => { unlockAudio(); run.dispatch({ type: 'start' }); }; primary.disabled = false; }
     }
     if (running) chart.set({ points: run.points, targetG: kind === 'espresso' ? s.targetYield : steps.at(-1) && lastTarget(steps), tEnd: kind === 'espresso' ? 35 : s.brew?.planEndS, steps: kind === 'espresso' ? null : steps });
   };
