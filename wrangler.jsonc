@@ -12,17 +12,16 @@
     "run_worker_first": ["/api/*"]
   },
 
-  // Household sync is OFF until you enable it, so the site deploys with no database. To turn it on (docs/DEPLOY.md, "Household sync"):
-  // create the D1 database, then uncomment the block below and paste its id. Enabled with the placeholder id, a deploy fails
-  // (test/hosting.test.mjs checks that).
-  // "d1_databases": [
-  //   {
-  //     "binding": "DB",
-  //     "database_name": "dot-scale",
-  //     "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-  //     "migrations_dir": "migrations"
-  //   }
-  // ],
+  // Household sync database (D1). The id is a resource id, not a secret. The Worker still refuses to run sync until the
+  // SYNC_PEPPER secret exists and the tables are created (docs/DEPLOY.md, "Household sync").
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dot-scale",
+      "database_id": "24094e4a-656a-433d-860c-241d7723b750",
+      "migrations_dir": "migrations"
+    }
+  ],
 
   // Gives the site a *.workers.dev address for testing before the custom domain is switched over.
   "workers_dev": true,
