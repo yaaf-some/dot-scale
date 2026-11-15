@@ -641,9 +641,9 @@ function espressoTips(brew, m, taste, c, hist) {
       const early = Math.max(1, Math.round(drip ?? over));
       tips.push(mkTip({
         id: 'stop-early', variable: 'stop', priority: P.stopEarly, confidence: drip != null ? 0.7 : 0.5, learnCard: LEARN.stopEarly,
-        title: 'Stop the pump a little earlier',
+        title: 'Stop the shot a little earlier',
         change: `Stop about ${early} g before ${fmtG(m.targetYield)} g.`,
-        why: drip != null ? `${fmtG(drip)} g kept dripping after the pump stopped${over > E.yieldToleranceG ? ` and you ended ${fmtG(over)} g over target` : ''}.` : `You ended ${fmtG(over)} g over target.`,
+        why: drip != null ? `${fmtG(drip)} g kept dripping after you stopped the shot${over > E.yieldToleranceG ? ` and you ended ${fmtG(over)} g over target` : ''}.` : `You ended ${fmtG(over)} g over target.`,
       }));
     } else if (over < -E.yieldToleranceG && !timeDir) {
       tips.push(mkTip({

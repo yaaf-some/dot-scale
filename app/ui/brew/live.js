@@ -7,18 +7,27 @@ import { stepsFor } from '../../methods/index.js';
 import { createChart } from './chart.js';
 import { demoPanel } from './demo-panel.js';
 import { unlockAudio } from './audio.js';
+import { showsManualEnd } from './runner.js';
 
 const ESPRESSO_PHASES = [
-  { id: 'waiting', label: 'Waiting' }, { id: 'first-drops', label: 'First drops' },
+  { id: 'waiting', label: 'Waiting' }, { id: 'first-drops', label: 'Pre-infusion' },
   { id: 'main-flow', label: 'Main flow' }, { id: 'finishing', label: 'Finishing' },
 ];
 const READY_TEXT = {
-  espresso: (auto) => (auto ? 'Ready. Start the pump; the timer starts by itself at the first drops' : 'Ready. Tap Start with the pump'),
+  espresso: (auto) => (auto ? 'Ready. Start your machine; the timer starts by itself when pre-infusion begins' : 'Ready. Tap Start at the moment you start your machine'),
   pour: (auto, F) => `Ready. Start pouring the bloom${F.firstTarget ? ` to ${fmtG(F.firstTarget)} g` : ''}`,
   immersion: () => 'Ready. Pour in the water',
   moka: () => 'Ready. Put it on the heat, then tap Start',
 };
 const CUE_SHOW_MS = 9000;
+
+// paint() runs about 10x a second. Writing the same value to the DOM still costs style work, so only write what changed.
+const setText = (el, text) => {
+  const n = el.firstChild;
+  if (n && n.nodeType === 3 && !n.nextSibling) { if (n.data !== text) n.data = text; } else if (el.textContent !== text) el.textContent = text; // edit the text node in place
+};
+const setHidden = (el, hidden) => { if (el.hidden !== hidden) el.hidden = hidden; };
+const setData = (el, key, value) => { if (el.dataset[key] !== value) el.dataset[key] = value; };
 
 export function renderLive(host, F) {
   const { ctx, method, run } = F;
@@ -29,7 +38,8 @@ export function renderLive(host, F) {
   const isPour = kind === 'pour';
 
   const cue = h('p', { class: 'live-cue', 'aria-live': 'assertive', 'data-testid': 'live-cue' });
-  const weight = h('div', { class: 'live-weight num', 'data-testid': 'live-weight' });
+  const weightNum = h('span', {});
+  const weight = h('div', { class: 'live-weight num', 'data-testid': 'live-weight' }, weightNum, h('small', {}, 'g'));
   const timer = h('b', { class: 'num', 'data-testid': 'live-timer' }, '0:00');
   const flow = h('b', { class: 'num' }, '0.0');
   const progress = h('div', { class: 'progress', role: 'progressbar', 'aria-label': 'Progress to target', 'aria-valuemin': 0, 'aria-valuemax': 100 }, h('i'));
@@ -64,11 +74,12 @@ export function renderLive(host, F) {
     if (s.phase === 'ready') return READY_TEXT[kind](s.settings.autoStart, F);
     if (kind === 'espresso') {
       const e = s.espresso;
-      return { waiting: 'Waiting for the first drops', 'first-drops': 'First drops', 'main-flow': 'Main flow', finishing: 'Stop the pump' }[e?.phase] ?? 'Running';
+      return { waiting: 'Waiting for pre-infusion', 'first-drops': 'Pre-infusion', 'main-flow': 'Main flow', finishing: 'Stop the shot' }[e?.phase] ?? 'Running';
     }
     return s.brew?.step?.label ?? 'Running';
   };
 
+  let lastP = -1, primaryMode = null;
   const paint = (out) => {
     const s = run.state;
     if (out) for (const c of out.cues) {
@@ -76,38 +87,37 @@ export function renderLive(host, F) {
     }
     if (s.phase === 'done') return F.go('result');
     const running = s.phase === 'running';
-    host.dataset.phase = s.phase;
-    weight.replaceChildren(h('span', {}, s.grams.toFixed(1)), h('small', {}, 'g'));
-    timer.textContent = fmtTime(running ? s.elapsedS : 0);
-    flow.textContent = s.flow.toFixed(1);
+    setData(host, 'phase', s.phase);
+    setText(weightNum, s.grams.toFixed(1));
+    setText(timer, fmtTime(running ? s.elapsedS : 0));
+    setText(flow, s.flow.toFixed(1));
     // the cue shows for a while, then the plain status takes over again
     const live = shownCue && performance.now() < shownCue.until && !(s.phase === 'ready');
-    cue.textContent = live ? shownCue.text : statusText(s);
-    cue.dataset.tone = live && s.espresso?.stopCueSent ? 'stop' : '';
+    const cueText = live ? shownCue.text : statusText(s);
+    if (cue.textContent !== cueText) cue.textContent = cueText; // replace the node (not edit it): screen readers announce that reliably
+    setData(cue, 'tone', live && s.espresso?.stopCueSent ? 'stop' : '');
     // progress toward the target
     const target = kind === 'espresso' ? s.targetYield : s.brew?.targetG ?? F.firstTarget ?? null;
     const p = Math.round((target ? Math.min(1, Math.max(0, s.grams / target)) : s.progress) * 100);
-    progress.firstChild.style.setProperty('--p', `${p}%`);
-    progress.setAttribute('aria-valuenow', String(p));
-    progressText.textContent = target ? `${s.grams.toFixed(1)} of ${fmtG(target, target < 100 ? 1 : 0)} g${s.grams < target ? ` · ${Math.max(0, target - s.grams).toFixed(1)} g to go` : ''}` : kind === 'moka' ? 'Dose and water are logged; now the heat' : '';
+    if (p !== lastP) { lastP = p; progress.firstChild.style.setProperty('--p', String(p / 100)); progress.setAttribute('aria-valuenow', String(p)); }
+    setText(progressText, target ? `${s.grams.toFixed(1)} of ${fmtG(target, target < 100 ? 1 : 0)} g${s.grams < target ? ` · ${Math.max(0, target - s.grams).toFixed(1)} g to go` : ''}` : kind === 'moka' ? 'Dose and water are logged; now the heat' : '');
     if (phases) for (const li of phases.children) {
       const i = ESPRESSO_PHASES.findIndex((x) => x.id === li.dataset.phase);
       const cur = ESPRESSO_PHASES.findIndex((x) => x.id === s.espresso?.phase);
-      li.dataset.state = !running || cur < 0 ? 'todo' : i < cur ? 'done' : i === cur ? 'now' : 'todo';
-      if (li.dataset.state === 'now') li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+      setData(li, 'state', !running || cur < 0 ? 'todo' : i < cur ? 'done' : i === cur ? 'now' : 'todo');
+      if (li.dataset.state === 'now') { if (!li.hasAttribute('aria-current')) li.setAttribute('aria-current', 'step'); } else if (li.hasAttribute('aria-current')) li.removeAttribute('aria-current');
     }
     if (stepCard) paintStep(s, running);
     // buttons
-    primary.hidden = false; finish.hidden = !running; tare.hidden = running;
-    if (s.phase === 'ready') {
-      primary.textContent = kind === 'moka' ? 'Start timer' : kind === 'espresso' ? 'Start timer (pump on)' : 'Start timer';
-      primary.onclick = () => { unlockAudio(); run.dispatch({ type: 'start' }); };
-      primary.disabled = false;
-    } else if (kind === 'espresso') {
-      primary.textContent = 'Pump stopped';
-      primary.onclick = () => run.dispatch({ type: 'pumpOff' });
-      primary.disabled = false;
-    } else primary.hidden = true;
+    setHidden(finish, !running || !showsManualEnd(kind, s.settings)); setHidden(tare, running); // espresso has no Done button: the app detects the end of the shot (Cancel is always there)
+    // Only the Start button lives in the primary slot. An espresso shot is ended by the app itself (the flow dropping off is
+    // detected from the weight), so nothing asks you to say that the water has stopped; "End shot now" is just the fallback.
+    const mode = s.phase === 'ready' ? 'start' : 'none';
+    if (mode !== primaryMode) { // label and handler only change when the mode does
+      primaryMode = mode;
+      setHidden(primary, mode === 'none');
+      if (mode === 'start') { primary.textContent = kind === 'espresso' ? 'Start timer (machine on)' : 'Start timer'; primary.onclick = () => { unlockAudio(); run.dispatch({ type: 'start' }); }; primary.disabled = false; }
+    }
     if (running) chart.set({ points: run.points, targetG: kind === 'espresso' ? s.targetYield : steps.at(-1) && lastTarget(steps), tEnd: kind === 'espresso' ? 35 : s.brew?.planEndS, steps: kind === 'espresso' ? null : steps });
   };
   const lastTarget = (list) => [...list].reverse().find((x) => Number.isFinite(x.targetG))?.targetG;
@@ -121,11 +131,11 @@ export function renderLive(host, F) {
       stepSub.textContent = steps[0]?.label ?? '';
       return;
     }
-    stepName.textContent = `Step ${b.index + 1} of ${b.count}`;
+    setText(stepName, `Step ${b.index + 1} of ${b.count}`);
     const wantsWeight = isPour && b.targetG != null && !b.reached;
-    stepBig.textContent = wantsWeight ? `${b.remainingG.toFixed(0)} g to go` : b.countdownS != null ? fmtTime(Math.ceil(b.countdownS)) : '';
-    stepSub.textContent = [b.step?.label, b.nextCue ? `Next in ${fmtTime(Math.ceil(b.nextCue.inS))}: ${b.nextCue.label}` : null].filter(Boolean).join(' · ');
-    stepCard.dataset.kind = b.step?.kind ?? '';
+    setText(stepBig, wantsWeight ? `${b.remainingG.toFixed(0)} g to go` : b.countdownS != null ? fmtTime(Math.ceil(b.countdownS)) : '');
+    setText(stepSub, [b.step?.label, b.nextCue ? `Next in ${fmtTime(Math.ceil(b.nextCue.inS))}: ${b.nextCue.label}` : null].filter(Boolean).join(' · '));
+    setData(stepCard, 'kind', b.step?.kind ?? '');
   }
 
   const connection = () => { warn.hidden = run.connected; };

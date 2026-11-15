@@ -46,7 +46,7 @@ they were made on; on a new address, press Connect and pick the scale again.
 
 ## 2. Deploys and rollbacks
 
-Every merge to `main` builds and deploys. CI (unit tests plus the Demo-mode browser test) runs on every pull request, and Cloudflare
+Every merge to `main` builds and deploys. CI (unit tests plus the Demo-mode browser test in Chromium and in WebKit, on a pinned Node 27 alpha) runs on every pull request, and Cloudflare
 posts its build status on the PR. To roll back, open the Worker's **Deployments** tab, pick an earlier version and roll back to it.
 Secrets and bindings are not touched by a rollback.
 

@@ -3,15 +3,15 @@ import { h } from '../ui/dom.js';
 import { section, group } from '../ui/components.js';
 import { confirmDialog } from '../ui/dialog.js';
 import { registerSettingsSection } from '../ui/settings-sections.js';
-import { getSync } from './boot.js';
+import { loadSync } from './boot.js';
 
 const btn = (label, onclick, cls = '') => h('button', { class: `btn small ${cls}`.trim(), type: 'button', onclick }, label);
 const rowOf = (...kids) => h('div', { class: 'row' }, ...kids);
 
 registerSettingsSection({
   id: 'sync', title: 'Sync', order: 55,
-  render: (ctx) => {
-    const sync = getSync();
+  render: async (ctx) => {
+    const sync = await loadSync(ctx.store);
     if (!sync) return section('Sync', h('p', { class: 'section-note' }, 'Sync is not available.'), { id: 'sync' });
     const body = h('div', {});
     const code = h('code', { class: 'sync-code' });

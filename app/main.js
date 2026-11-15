@@ -13,6 +13,7 @@ import { applyTheme } from './ui/theme.js';
 import { icon } from './ui/icons.js';
 import { h, setChildren } from './ui/dom.js';
 import { toast } from './ui/toast.js';
+import { transition, withPlaceholder } from './ui/motion.js';
 import { registerServiceWorker } from './pwa.js';
 import { startSync } from './sync/boot.js';
 import './modules.js';
@@ -85,7 +86,7 @@ async function show(route, { sameView = false } = {}) {
     renderTabs(name);
     ctx.setTitle(meta.title ?? name);
     let cleanup;
-    try { cleanup = await mod.mount(root, ctx); } catch (e) {
+    try { cleanup = await withPlaceholder(root, Promise.resolve(mod.mount(root, ctx))); } catch (e) {
       console.error(`view "${name}" crashed`, e);
       setChildren(root, h('div', { class: 'empty' }, h('h2', {}, 'Something went wrong'), h('p', {}, 'This screen couldn’t load. Go back to Home and try again.'), h('a', { class: 'btn primary', href: '#/home' }, 'Back to Home')));
     }
@@ -94,13 +95,15 @@ async function show(route, { sameView = false } = {}) {
       try { typeof cleanup === 'function' && cleanup(); } catch (e) { console.error(e); }
       return;
     }
-    current = { name, key: route.path, controller, cleanup: typeof cleanup === 'function' ? cleanup : null, meta };
+    current = { name, key: route.path, route, controller, cleanup: typeof cleanup === 'function' ? cleanup : null, meta };
     window.scrollTo(0, scrollY);
     if (!sameView) host.focus({ preventScroll: true });
   };
 
-  const animate = !sameView && current.name && current.name !== name && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (animate) await document.startViewTransition(swap).updateCallbackDone; else await swap();
+  // Same tab: going deeper (Journal list → a brew) pushes, going back pops; a different tab crossfades. No API → instant swap.
+  const depth = (r) => r?.params?.length ?? 0;
+  const kind = current.name !== name ? 'tab' : depth(route) >= depth(current.route) ? 'push' : 'pop';
+  if (!sameView && current.name) await transition(swap, { kind }); else await swap();
 }
 
 function rerenderSoon() {

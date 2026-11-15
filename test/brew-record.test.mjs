@@ -3,8 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../app/core/store.js';
 import { memoryAdapter } from '../app/core/store-adapters.js';
-import { methodOrder, startingRecipe, recipeFromBrew, editRecipe, buildBrew, withAnalysis, saveBrew, saveProfileRecipe } from '../app/core/brew-record.js';
-import { beepFor } from '../app/ui/brew/runner.js';
+import { methodOrder, startingRecipe, recipeFromBrew, editRecipe, buildBrew, saveBrew, saveProfileRecipe } from '../app/core/brew-record.js';
+import { withAnalysis } from '../app/core/brew-analysis.js';
+import { beepFor, showsManualEnd } from '../app/ui/brew/runner.js';
 import { demoActions } from '../app/ui/brew/demo-panel.js';
 import { layout, pointsFromSamples } from '../app/ui/brew/chart.js';
 import { getMethod } from '../app/methods/index.js';
@@ -161,4 +162,11 @@ test('an interrupted shot is kept as an incomplete Brew, and the finished one re
   const later = buildBrew({ id: 'next', record, profile: alexa, recipe: { method: 'espresso' }, startedAt: 50 });
   const { analysis } = withAnalysis(later, { history: [part] });
   assert.ok(analysis.verdict);
+});
+
+test('showsManualEnd: espresso has no Done button unless "finish by itself" is off; other methods always do', () => {
+  assert.equal(showsManualEnd('espresso', { autoStop: true }), false);
+  assert.equal(showsManualEnd('espresso', undefined), false);
+  assert.equal(showsManualEnd('espresso', { autoStop: false }), true, 'the person chose to end it by hand');
+  for (const k of ['pour', 'immersion', 'moka']) assert.equal(showsManualEnd(k, { autoStop: true }), true);
 });

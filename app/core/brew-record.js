@@ -4,10 +4,8 @@
 //   methodOrder(profile, brews)                   method ids, last-used first
 //   startingRecipe({ method, profile, recipes, brews, recipeId, brewId })   what the Recipe screen is prefilled with
 //   buildBrew({ id, ... record, ... })            a Brew record from session.record() + the screen's choices
-//   analyzeBrew(brew, { history, bean, ... })     analyze() with the right context (re-run it when taste changes)
 //   saveBrew(store, brew) / saveProfileRecipe(store, ...)
 import { METHODS, defaultRecipe, getMethod, linkRecipe, ratioOf, round } from '../methods/index.js';
-import { analyze } from '../insights/analyze.js';
 import { uuid } from './store.js';
 
 const live = (r) => r && !r.deleted;
@@ -136,18 +134,6 @@ export function shouldKeepPartial(record) {
 /** What is saved when a started brew is interrupted: the run so far, marked `incomplete`. Saving the finished brew under the same id replaces it. */
 export function buildPartialBrew(args) {
   return { ...buildBrew(args), incomplete: true };
-}
-
-/** analyze() with this brew's context. `history` = earlier brews (any), `bean` = the Bean record, `recipe` supplies planned steps. */
-export function analyzeBrew(brew, { history = [], bean = null, recipe = null, steps = null } = {}) {
-  const earlier = history.filter((b) => live(b) && !b.incomplete && b.id !== brew.id && (b.startedAt ?? 0) < brew.startedAt);
-  return analyze(brew, { method: brew.method, gear: brew.gear, history: earlier, bean, recipe, steps: steps ?? recipe?.steps ?? null });
-}
-
-/** Re-run the analysis and attach it. Returns { brew, analysis }. */
-export function withAnalysis(brew, ctx) {
-  const analysis = analyzeBrew(brew, ctx);
-  return { analysis, brew: { ...brew, metrics: analysis.metrics, insights: { verdict: analysis.verdict, tips: analysis.tips, learn: analysis.learn } } };
 }
 
 export async function saveBrew(store, brew) {

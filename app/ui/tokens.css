@@ -42,10 +42,17 @@
   --target: 48px;
   --target-live: 64px;
 
-  /* Motion */
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --t-fast: 120ms;
-  --t-base: 220ms;
+  /* Motion: subtle and quick. Animate transform and opacity only. Reduced motion zeroes the durations below, and
+     animations are additionally opted in with (prefers-reduced-motion: no-preference). See docs/DESIGN.md "Motion". */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);          /* decelerate: things arriving */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);           /* accelerate: things leaving */
+  --t-fast: 120ms;                                  /* press, hover, small state changes */
+  --t-base: 220ms;                                  /* enter, route change */
+  --t-exit: 140ms;                                  /* leaving is quicker than arriving */
+  --spring-t: 520ms;                                /* the one spring: "shot complete" */
+  /* One damped spring as a linear() easing (about 8% overshoot). Browsers without linear() ignore the declaration that
+     uses it, so every use is preceded by a plain var(--ease) declaration. */
+  --spring: linear(0, 0.2 5%, 0.55 10%, 0.88 16%, 1.05 22%, 1.08 26%, 1.06 31%, 1.01 40%, 0.99 48%, 1 60%, 1);
 
   /* Layout */
   --rail: 104px;
@@ -100,5 +107,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --t-fast: 0ms; --t-base: 0ms; }
+  :root { --t-fast: 0ms; --t-base: 0ms; --t-exit: 0ms; --spring-t: 0ms; }
 }

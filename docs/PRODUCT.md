@@ -94,7 +94,7 @@ power off, etc., from the existing app), sync (household code), Advanced (debug 
     first-drop time; with auto-start the timer begins at the first drops, so `timeS` excludes the pump-to-first-drop lag, first-drop time is left
     unset (never reported as 0), and `startSource: 'auto'` (vs `'manual'`) on the Brew record is how analysis knows which it has.
   - Espresso auto-stop: once yield nears target and flow drops to near 0 for 2 s → done. A cue at about 2 g before target
-    ("stop the pump", with an optional beep) so the user can hit the yield despite the drip after stopping. The app learns the
+    ("stop the shot", with an optional beep) so the user can hit the yield despite the drip after stopping. The app learns the
     typical post-stop drip per profile/gear and suggests stopping that many grams early.
   - Pour-over: steps advance by weight/time (bloom → pours → drawdown), with the next target shown big and a gentle cue to pour.
   - Immersion (French press, AeroPress, Prestina): a countdown with stir/plunge/press cues.

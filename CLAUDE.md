@@ -15,12 +15,15 @@ no dependencies. Hosted on **Cloudflare** (Worker + static assets) at https://co
   if so, say so in your PR).
 
 ## Layout
-- `index.html` — thin shell: head, tokens, `<nav id="tabs">`, `<main id="view">`, `<script type="module" src="app/main.js">`.
+- `index.html` — thin shell: head, tokens, `<nav id="tabs">`, `<main id="view">`, `<script type="module" src="app/main.js">`, plus a `modulepreload`
+  list of the critical graph (`app/main.js` + the Home view, static imports only). **Regenerate it with `node scripts/preload-links.mjs` whenever
+  those imports change**; `test/preload.test.mjs` fails on drift. Heavy code stays out of that graph on purpose (`insights/analyze.js`,
+  `sync/client.js`, the brew result screen): load it with a dynamic `import()` and add the path to `LAZY` in `app/pwa.js` (the test checks that too).
 - `app/main.js` — boot, hash router, view mounting. `app/modules.js` — side-effect imports for feature modules.
 - `app/core/` — `store.js` (IndexedDB records + sync hooks, adapters in `store-adapters.js`), `bootstrap.js` + `seeds.js`
   (first-run seeds and the localStorage migration), `scale.js` (BLE + auto-reconnect), `demo-scale.js` (simulator), `events.js`.
 - `app/ui/` — `tokens.css` (all design tokens), `app.css` (layout + components), `components.js`, `dialog.js`, `editors.js`,
-  `scale-line.js`, `nudges.js`, `settings-sections.js`, `router.js`, `theme.js`, and `views/<name>.js`.
+  `scale-line.js`, `motion.js` (view-transition helper, `leave()`, skeleton; motion tokens live in `tokens.css`, see DESIGN.md "Motion"), `nudges.js`, `settings-sections.js`, `router.js`, `theme.js`, and `views/<name>.js`.
 - `app/pwa.js` — registers `sw.js` (kept out of index.html so a strict CSP with no inline script works) and, once the page is
   idle, imports the tab views so their whole module graph is cached for offline use. Add a tab view to `TAB_VIEWS` there.
 - `sw.js` — service worker, so the installed app opens offline. No file list: it caches whatever same-origin files the app
@@ -60,8 +63,8 @@ export async function mount(root, ctx) { /* fill `root`; optionally return a cle
 - Seed records use fixed ids and `updatedAt: 1` (see `seeds.js`); don't re-seed with random ids.
 
 ## Commands
-- `npm test` — unit tests (Node 22.13+: the sync tests use the built-in `node:sqlite`)
-- `npm run smoke` — browser smoke test (`SCREENSHOT=/path.png npm run smoke` to capture the page)
+- `npm test` — unit tests (local Node 22.13+: the sync tests use the built-in `node:sqlite`; CI runs an exact Node 27 alpha, pinned in `.github/actions/node27`)
+- `npm run smoke` — browser smoke test (`SCREENSHOT=/path.png npm run smoke` to capture the page; `BROWSER=webkit npm run smoke` runs it in WebKit)
 - `npm run check` — both. **Run before every push.**
 
 ## Rules
@@ -77,7 +80,7 @@ export async function mount(root, ctx) { /* fill `root`; optionally return a cle
 ## Branches and the PR pipeline (controller-run)
 
 - `main` is **production**: a merge deploys to https://coffee.yaafsome.fyi through Workers Builds. Every change reaches it through a PR.
-- CI (`.github/workflows/ci.yml`, job `check`) runs unit tests plus the Demo-mode smoke test on every PR. Other branches get a
+- CI (`.github/workflows/ci.yml`) runs two parallel jobs on every PR: `check` (unit tests + Demo-mode smoke test in Chromium) and `webkit` (the same smoke test in WebKit, the engine of Bluefy). Keep the `check` id/name; no `paths` filters (a skipped required check blocks merging). Dependabot bumps the pinned action SHAs monthly in one PR. Other branches get a
   Cloudflare preview build (`docs/DEPLOY.md`, "Branch previews").
 
 Worker rules:

@@ -2,10 +2,11 @@
 // - Pages (navigations): network-first, so a new deploy shows up on the next load; cached copy when offline.
 // - Other same-origin GETs (app/ modules, CSS, icons, ...): stale-while-revalidate. Served from cache when present,
 //   refreshed in the background, so a deploy reaches assets one load after it reaches the page.
+// - Navigation preload is on: the page request starts while the worker boots, so a cold worker adds no delay.
 // - Never cached: /api/ (sync carries the household code), non-GET requests, other origins.
 // The page posts the URLs it loaded before this worker took control (see index.html), so the very first visit is
 // also cached. Bump VERSION to drop every old cache at once.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `dot-scale-${VERSION}`;
 const SHELL = ['./', 'manifest.webmanifest'];
 
@@ -29,6 +30,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((k) => k.startsWith('dot-scale-') && k !== CACHE).map((k) => caches.delete(k)));
+    try { await self.registration.navigationPreload?.enable(); } catch { /* not supported: plain fetch below */ }
     await self.clients.claim();
   })());
 });
@@ -39,14 +41,15 @@ self.addEventListener('message', (event) => {
   if (!msg || msg.type !== 'cache-urls' || !Array.isArray(msg.urls)) return;
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    await Promise.all(msg.urls.map(async (href) => {
-      try {
-        const url = new URL(href, self.location.href);
-        if (!cacheable(url) || (await cache.match(url.href))) return;
-        const res = await fetch(url.href);
-        if (storable(res)) await cache.put(url.href, res);
-      } catch { /* best effort */ }
-    }));
+    // One pass: list what is stored once, then fetch only the rest, a few at a time.
+    const have = new Set((await cache.keys()).map((r) => r.url));
+    const todo = [...new Set(msg.urls.map((h) => new URL(h, self.location.href)).filter((u) => cacheable(u) && !have.has(u.href)).map((u) => u.href))];
+    const worker = async () => {
+      for (let href; (href = todo.pop());) {
+        try { const res = await fetch(href); if (storable(res)) await cache.put(href, res); } catch { /* best effort */ }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, todo.length) }, worker));
     event.ports[0]?.postMessage('done');
   })());
 });
@@ -60,7 +63,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
       try {
-        const res = await fetch(req, { cache: 'no-cache' });
+        const res = (await event.preloadResponse) || await fetch(req, { cache: 'no-cache' });
         if (storable(res)) await cache.put(isShellPage(url) ? './' : req, res.clone());
         return res;
       } catch (err) {

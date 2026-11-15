@@ -8,7 +8,11 @@
 //   run.destroy()
 import { Emitter } from '../../core/events.js';
 import { createBrewSession } from '../../core/brew-session.js';
-import { beep } from './audio.js';
+import { beep, buzz } from './audio.js';
+
+/** Is there a manual "Done" button on the live screen? Espresso ends by itself (flow detection), so there is none, unless the
+ *  person turned "Finish espresso by itself" off in Settings: then it is the only way to end the shot short of the 2 minute limit. */
+export const showsManualEnd = (kind, settings) => kind !== 'espresso' || settings?.autoStop === false;
 
 /** What a cue sounds like, or null for silent. Pure, so it can be tested. */
 export function beepFor(cue) {
@@ -53,7 +57,7 @@ export function createRunner({ scale, prefs, method, recipe, history = [], profi
     if (out.state.phase === 'running' && out.state.startT != null) {
       points.push({ t: out.state.t - out.state.startT, g: out.state.grams, f: out.state.flow });
     }
-    if (prefs.get('beep', true)) for (const c of out.cues) { const k = beepFor(c); if (k) beep(k); }
+    if (prefs.get('beep', true)) for (const c of out.cues) { const k = beepFor(c); if (k) { beep(k); buzz(k); } }
     bus.emit('update', out);
     return out;
   }

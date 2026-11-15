@@ -59,8 +59,28 @@ phone                      iPad / wide
 ```
 Left-aligned everywhere; numerals may centre inside their own readout.
 
-Motion: tab changes crossfade (View Transitions where supported, none otherwise); buttons press in 2%; one calm
-reveal for the connect state. Everything respects `prefers-reduced-motion`.
+## Motion
+Character: **subtle and quick**. Used at a counter with wet hands, so nothing slows a tap and nothing distracts on the live screen.
+Tokens in `tokens.css`: `--t-fast` 120 ms (press, hover), `--t-base` 220 ms (enter, route), `--t-exit` 140 ms (leaving is quicker),
+`--ease` / `--ease-in`, and one `--spring` (`linear()`, 520 ms) used only for the "shot complete" cue. Helpers in `app/ui/motion.js`.
+
+Rules: animate `transform` and `opacity` only; opt animations in with `(prefers-reduced-motion: no-preference)` (the tokens also drop
+to 0 ms under `reduce`; there is no global `animation-duration` override); no flashing (the slowest pulse is 1.1 s at 35% depth);
+strict CSP means no inline styles, only classes and data attributes. Every effect has a fallback:
+
+| moment | how | fallback |
+|---|---|---|
+| tab / route change | View Transition on `main` only (tab bar stays), `data-vt` = tab (fade + 6 px rise), push / pop (16 px slide, Journal list ↔ brew) | instant swap |
+| brew screens (recipe → prep → result) | `data-enter` fade-and-rise on the stage; **never** on the live screen | none |
+| dialogs and toasts | keyframes in, `data-leaving` keyframes out, closed after `--t-exit` by a timer | opens and closes instantly |
+| press / hover / focus | `:active` scale 0.97-0.98, hover only under `(hover: hover)`, global `:focus-visible` ring | none |
+| shot complete | the stop cue springs in (`--spring`); other cues get one 360 ms pulse | plain ease where `linear()` is missing |
+| live progress bar | `scaleX` instead of `width` (compositor only) | n/a |
+| slow screen | soft skeleton after 140 ms if the view has rendered nothing | blank until ready |
+| scrolling chip rows | static edge mask (no scroll-driven animation needed) | none |
+
+Cues: the target and step cues always show on screen; sound follows the "Beep at target" setting and `navigator.vibrate` (Android,
+desktop Chrome; absent on iOS) fires with it.
 
 ## Platform rules baked into the tokens
 - Light and dark are plain custom properties switched by `prefers-color-scheme` and `[data-theme]`; **no `light-dark()`
