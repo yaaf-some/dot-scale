@@ -4,8 +4,8 @@ Sync lets the household's iPhones and iPads share profiles, beans, recipes and b
 fully offline and syncs in the background. There are no accounts; a **household code** such as `maple-tiger-orbit-river-4271`
 is the only secret.
 
-Until the Cloudflare side is set up (`docs/DEPLOY.md`: create the D1 database and apply its migration), sync is simply
-off. The app shows "Sync not set up" and keeps working on each device.
+Until the Cloudflare side is set up (`docs/DEPLOY.md`: the D1 database and its migration, and the `SYNC_PEPPER` secret), sync is simply
+off. Face ID / passkey sign-in is designed but not built: see `docs/PASSKEYS.md`. The app shows "Sync not set up" and keeps working on each device.
 
 ## Where things live
 
