@@ -97,7 +97,7 @@ export function renderLive(host, F) {
     // progress toward the target
     const target = kind === 'espresso' ? s.targetYield : s.brew?.targetG ?? F.firstTarget ?? null;
     const p = Math.round((target ? Math.min(1, Math.max(0, s.grams / target)) : s.progress) * 100);
-    if (p !== lastP) { lastP = p; progress.firstChild.style.setProperty('--p', `${p}%`); progress.setAttribute('aria-valuenow', String(p)); }
+    if (p !== lastP) { lastP = p; progress.firstChild.style.setProperty('--p', String(p / 100)); progress.setAttribute('aria-valuenow', String(p)); }
     setText(progressText, target ? `${s.grams.toFixed(1)} of ${fmtG(target, target < 100 ? 1 : 0)} g${s.grams < target ? ` · ${Math.max(0, target - s.grams).toFixed(1)} g to go` : ''}` : kind === 'moka' ? 'Dose and water are logged; now the heat' : '');
     if (phases) for (const li of phases.children) {
       const i = ESPRESSO_PHASES.findIndex((x) => x.id === li.dataset.phase);

@@ -13,6 +13,7 @@ import { renderPrep } from '../brew/prep.js';
 import { renderLive } from '../brew/live.js';
 import { createRunner } from '../brew/runner.js';
 import { createWakeLock } from '../brew/wake-lock.js';
+import { replay } from '../motion.js';
 
 // Never re-mount mid-brew when a profile or sync change arrives: the live session would be lost.
 export const meta = { title: 'Brew', keepOnProfileChange: true };
@@ -74,6 +75,7 @@ export async function mount(root, ctx) {
       else draw(SCREENS[name]);
       if (name === 'prep') loadResult().catch(() => {}); // warm it up; failure is handled when it is really needed
       scrollTo(0, 0);
+      if (name !== 'live') replay(stage, 'enter', 400); // a quick fade-and-rise; never on the live screen, which must not lose frames
     },
     /** Abandon the brew: nothing is saved. Back to the recipe. */
     cancel() {
