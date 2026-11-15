@@ -51,6 +51,8 @@ const pw = require('playwright');
     // ---- motion: toasts and dialogs leave through data-leaving, then really close (instant under reduced motion) ----
     await page.evaluate(async () => { const m = await import('/app/ui/dialog.js'); window.__dv = 'pending'; m.confirmDialog({ title: 'Sure?', message: 'Test', confirmLabel: 'Yes' }).then((v) => (window.__dv = v)); });
     await page.waitForSelector('dialog.sheet[open]');
+    // Escape goes to the focused element: wait until showModal has moved focus into the dialog (slow CI runners, WebKit).
+    await page.waitForFunction(() => document.querySelector('dialog')?.contains(document.activeElement), null, { timeout: 3000 });
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('dialog'), null, { timeout: 2000 });
     check((await page.evaluate(() => window.__dv)) === false, 'Escape closes a dialog (after its exit animation) and resolves as dismissed');
