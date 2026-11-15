@@ -71,7 +71,12 @@ export async function mount(root, ctx) {
         const cleanup = render(stage, F);
         if (mine === renders) stageCleanup = cleanup; else try { cleanup?.(); } catch (e) { console.error(e); } // a screen switched again while rendering
       };
-      if (name === 'result') loadResult().then((render) => { if (mine === renders) draw(render); }, (e) => { console.error('result screen failed to load', e); ctx.toast('Couldn’t open the result. Check your connection.'); });
+      if (name === 'result') loadResult().then((render) => { if (mine === renders) draw(render); }, (e) => {
+        console.error('result screen failed to load', e);
+        if (mine !== renders) return;
+        setChildren(stage, h('div', { class: 'empty' }, h('h2', {}, 'Couldn’t open the result'), h('p', {}, 'Check your connection, then try again. Your brew is not lost.'),
+          h('button', { class: 'btn primary', type: 'button', onclick: () => F.go('result') }, 'Try again')));
+      });
       else draw(SCREENS[name]);
       if (name === 'prep') loadResult().catch(() => {}); // warm it up; failure is handled when it is really needed
       scrollTo(0, 0);

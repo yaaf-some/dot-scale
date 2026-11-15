@@ -15,7 +15,7 @@ export function pickNudge(data) {
   const dismissed = data.store?.prefs?.get('nudgeDismissed', {}) ?? {};
   const full = { ...data, dismissed };
   for (const { fn } of sources) {
-    try { const n = fn(full); if (n && typeof n.then !== 'function' && usable(n, dismissed)) return n; } catch (e) { console.error('nudge source failed', e); }
+    try { const n = fn(full); if (n && typeof n.then === 'function') { n.catch(() => {}); continue; } if (usable(n, dismissed)) return n; } catch (e) { console.error('nudge source failed', e); }
   }
   return null;
 }

@@ -92,7 +92,8 @@ export function renderLive(host, F) {
     setText(flow, s.flow.toFixed(1));
     // the cue shows for a while, then the plain status takes over again
     const live = shownCue && performance.now() < shownCue.until && !(s.phase === 'ready');
-    setText(cue, live ? shownCue.text : statusText(s));
+    const cueText = live ? shownCue.text : statusText(s);
+    if (cue.textContent !== cueText) cue.textContent = cueText; // replace the node (not edit it): screen readers announce that reliably
     setData(cue, 'tone', live && s.espresso?.stopCueSent ? 'stop' : '');
     // progress toward the target
     const target = kind === 'espresso' ? s.targetYield : s.brew?.targetG ?? F.firstTarget ?? null;

@@ -3,7 +3,7 @@
 import { registerNudge } from './nudges.js';
 
 let loaded = null;
-const load = () => (loaded ??= import('../journal/nudge.js'));
+const load = () => (loaded ??= import('../journal/nudge.js').catch((e) => { loaded = null; throw e; })); // a failed load may be retried
 
 // Above the shell's own bean-age (40) and Bluetooth (50) notes, below the storage warning (90).
 registerNudge(60, (data) => (data.brews?.length ? load().then((m) => m.journalNudge(data)) : null));
