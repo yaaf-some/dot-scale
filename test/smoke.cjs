@@ -21,6 +21,11 @@ const pw = require('playwright');
   try {
     // ---- phone: first run, with legacy localStorage data to migrate ----
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    // Diagnostics for the motion waits below: a 20 ms ticker records every time the page's timers ran late (a stalled main thread).
+    await ctx.addInitScript(() => {
+      window.__late = []; let last = performance.now();
+      setInterval(() => { const n = performance.now(); if (n - last > 120) window.__late.push(`${Math.round(last)}+${Math.round(n - last)}`); last = n; }, 20);
+    });
     await ctx.addInitScript(() => {
       if (!localStorage.getItem('dot.history')) {
         localStorage.setItem('dot.history', JSON.stringify([{ at: 1700000000000, dose: 15, out: 240, time: 190 }]));
@@ -52,7 +57,7 @@ const pw = require('playwright');
     // A timeout here names which wait failed and dumps the relevant DOM state, so a flake on CI is diagnosable from the log.
     const motionState = () => page.evaluate(() => JSON.stringify({
       t: Math.round(performance.now()), vis: document.visibilityState, active: document.activeElement?.tagName, events: window.__motionEv,
-      reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      reduced: matchMedia('(prefers-reduced-motion: reduce)').matches, late: window.__late, warm: document.documentElement.hasAttribute('data-offline-ready'),
       dialogs: [...document.querySelectorAll('dialog')].map((d) => ({ open: d.open, leaving: d.hasAttribute('data-leaving'), rv: d.returnValue })),
       toasts: [...document.querySelectorAll('.toast')].map((t) => ({ leaving: t.hasAttribute('data-leaving'), text: t.textContent })),
     })).catch((e) => `no state (${e.message})`);
