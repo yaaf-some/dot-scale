@@ -90,16 +90,19 @@ power off, etc., from the existing app), sync (household code), Advanced (debug 
 - **Automation**, with defaults that can be turned off:
   - Auto-tare after the dose step / when the cup is placed (a stable weight jump, then tare).
   - Auto-start the timer at the first sustained flow (> 0.2 g/s for ≥ 0.5 s) or the first weight gain on pour-over.
-  - Espresso timing: the scale sees drops, not the pump. With a `start` event (pump on) the timer covers *waiting* and records the
+  - Espresso timing: the scale sees drops, not the machine. With a `start` event (machine on) the timer covers *waiting* and records the
     first-drop time; with auto-start the timer begins at the first drops, so `timeS` excludes the pump-to-first-drop lag, first-drop time is left
     unset (never reported as 0), and `startSource: 'auto'` (vs `'manual'`) on the Brew record is how analysis knows which it has.
   - Espresso auto-stop: once yield nears target and flow drops to near 0 for 2 s → done. A cue at about 2 g before target
     ("stop the shot", with an optional beep) so the user can hit the yield despite the drip after stopping. The app learns the
-    typical post-stop drip per profile/gear and suggests stopping that many grams early.
+    typical post-stop drip per profile/gear and suggests stopping that many grams early. The end of the shot is detected from the
+    flow collapsing: there is **no** manual "pump stopped" button (the screen must never claim something that is not true yet). A
+    plain "Done" button shows for espresso only when the owner turns auto-finish off in Settings; Cancel is always there.
   - Pour-over: steps advance by weight/time (bloom → pours → drawdown), with the next target shown big and a gentle cue to pour.
   - Immersion (French press, AeroPress, Prestina): a countdown with stir/plunge/press cues.
   - Moka pot: the scale is used for dose and water only; then a timer with "remove from heat when it starts to gurgle/blond".
-- Espresso phases on screen: *waiting → first drops → main flow → finishing*.
+- Espresso phases on screen: *waiting → pre-infusion → main flow → finishing* (the "pre-infusion" chip starts at the first drops; the
+  measured "first drops" time keeps that name on the result and Journal screens).
 - Charts: live weight and flow curve on canvas; the target line is shown.
 
 ## 5. Onboarding (first run, under 60 s, skippable)
@@ -155,6 +158,8 @@ deployed from `main` by Workers Builds (`docs/DEPLOY.md`).
   storage adapter and the store contract (`changesSince`/`applyRemote`) are in `docs/SYNC.md`.
 - **Security:** `_headers` with HSTS, nosniff, referrer policy, a strict CSP (`script-src 'self'`, `style-src 'self'`: the shell has no inline script or style) and a Permissions-Policy that keeps Bluetooth for
   the app itself. Never log codes or tokens. Cloudflare Access is optional later (it would interrupt the installed app).
+- **Passkeys (Face ID) for sync:** designed in `docs/PASSKEYS.md`. Stage 1 (a support probe in Settings → Sync) is shipped; the server
+  work waits for the owner's result from Safari and Bluefy. The household code remains the way in everywhere until then.
 - **Deploy:** Cloudflare Workers Builds from GitHub; steps in `docs/DEPLOY.md`. The owner performs the dashboard steps.
 
 ## 8. Insights engine (pure module, no DOM)

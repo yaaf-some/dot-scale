@@ -1,5 +1,10 @@
 # Phase 2: a faster, more polished app
 
+**Status: shipped (November 2026).** Cold Home load went from 1425 ms to 937 ms on a throttled test link (31 files / 6 levels deep to 24
+files / 3 levels, preloaded), live-screen layouts per 10 s from about 465 to about 97, and the Journal with 600 brews from 288 ms to
+121 ms; motion, view transitions and the live-screen wording fixes are in `docs/DESIGN.md`. Not done: Early Hints (only verifiable on the
+deployed site) and a reconnect-time measurement (needs a real scale). The text below is the original plan.
+
 Scope: the **deployed app only** (how it loads, how it runs while brewing, how it feels). CI and deploy speed are out of scope.
 Constraints: free Cloudflare plan, zero runtime dependencies, no build step, strict CSP (no inline script or style),
 Bluefy/WebKit is a first-class target (every feature needs a fallback where Safari lacks it).
