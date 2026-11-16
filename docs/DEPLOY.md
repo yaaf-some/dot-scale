@@ -139,6 +139,5 @@ in chunks, join a second device and converge (edit and delete), with no codes or
 **Not checked:** a household created and joined across two real devices against the **remote D1** (latency, quotas, error behaviour,
 and `db.batch()` atomicity exactly as documented, which the merge relies on); `CF-Connecting-IP` being present in production (rate
 limits share one bucket without it); the Workers Free plan's 50-queries-per-request assumption behind the 15-records-per-push cap
-(worst case measured on SQLite: 38 statements); a full brew on the Cloudflare address in Bluefy under the production headers; and
-passkeys on real devices (the Settings → Sync probe is the first check, see `docs/PASSKEYS.md`). Playwright's WebKit is not Bluefy
+(worst case measured on SQLite: 38 statements); a full brew on the Cloudflare address in Bluefy under the production headers. Playwright's WebKit is not Bluefy
 itself.

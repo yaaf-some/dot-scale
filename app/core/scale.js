@@ -247,7 +247,7 @@ export function createScale({ bluetooth = globalThis.navigator?.bluetooth, prefs
   }
 
   const scale = {
-    state, logLines, note: log, // note(text): add a line to the Debug log from outside (e.g. the passkey probe)
+    state, logLines,
     on: events.on.bind(events),
     get supported() { return state.supported; },
     get connected() { return state.status === 'connected'; },

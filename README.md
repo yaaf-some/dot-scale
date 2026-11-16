@@ -70,8 +70,7 @@ npm run check      # both; run before every push
 Open http://localhost:8737 in Chrome or Edge.
 
 **Where to read next:** `CLAUDE.md` (code layout and house rules), `docs/PRODUCT.md` (what the app is and how the pieces fit),
-`docs/DESIGN.md` (the look and feel), `docs/SYNC.md` (sharing between devices), `docs/DEPLOY.md` (hosting on Cloudflare), and
-`docs/PASSKEYS.md` (a Face ID sign-in idea for sharing, not built yet).
+`docs/DESIGN.md` (the look and feel), `docs/SYNC.md` (sharing between devices), `docs/DEPLOY.md` (hosting on Cloudflare).
 
 **How the scale talks.** The scale's firmware is left as it is. The app speaks Timemore's published
 [open scale protocol](https://github.com/TIMEMORE-COFFEE/open-scale-protocol) directly over Web Bluetooth:

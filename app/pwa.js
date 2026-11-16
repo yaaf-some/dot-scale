@@ -7,7 +7,7 @@
 const TAB_VIEWS = ['home', 'brew', 'journal', 'learn', 'settings', 'onboarding'];
 // Modules loaded on demand (dynamic import) that the views above do not import statically. Keep in step with the
 // import() calls in app/; test/preload.test.mjs fails when one is missing here.
-const LAZY = ['./ui/brew/result.js', './journal/nudge.js', './sync/client.js', './sync/store-adapter.js', './sync/passkey-probe.js'];
+const LAZY = ['./ui/brew/result.js', './journal/nudge.js', './sync/client.js', './sync/store-adapter.js'];
 
 // Warm-up is background work: wait for real idle time, one import at a time, and skip it when the user asked to save data.
 const saveData = () => navigator.connection?.saveData === true;

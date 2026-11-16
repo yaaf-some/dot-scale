@@ -158,8 +158,8 @@ deployed from `main` by Workers Builds (`docs/DEPLOY.md`).
   storage adapter and the store contract (`changesSince`/`applyRemote`) are in `docs/SYNC.md`.
 - **Security:** `_headers` with HSTS, nosniff, referrer policy, a strict CSP (`script-src 'self'`, `style-src 'self'`: the shell has no inline script or style) and a Permissions-Policy that keeps Bluetooth for
   the app itself. Never log codes or tokens. Cloudflare Access is optional later (it would interrupt the installed app).
-- **Passkeys (Face ID) for sync:** designed in `docs/PASSKEYS.md`. Stage 1 (a support probe in Settings → Sync) is shipped; the server
-  work waits for the owner's result from Safari and Bluefy. The household code remains the way in everywhere until then.
+- **Passkeys (Face ID) for sync: not pursued.** They work in Safari but not in Bluefy, so they would not protect the owner's devices
+  (`docs/PASSKEYS.md` keeps the design as a record). The household code, server hashing and rate limits are the protection.
 - **Deploy:** Cloudflare Workers Builds from GitHub; steps in `docs/DEPLOY.md`. The owner performs the dashboard steps.
 
 ## 8. Insights engine (pure module, no DOM)
