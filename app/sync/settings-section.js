@@ -41,36 +41,10 @@ registerSettingsSection({
       }
       body.replaceChildren(group(...rows));
     };
-    const probeSection = () => {
-      const result = h('p', { class: 'row-title', role: 'status' }), sub = h('span', { class: 'row-sub' });
-      const say = (line, note = '') => { result.textContent = line; sub.textContent = note; };
-      const log = (t) => ctx.scale.note?.(t);
-      let busy = false, mod = null;
-      const buttons = [];
-      const load = () => import('./passkey-probe.js').then((m) => (mod = m), () => null);
-      load(); // preload now, so the tap can call create() right away (WebKit needs the user gesture to be fresh)
-      const go = (test) => async () => {
-        if (busy) return;
-        busy = true; buttons.forEach((b) => { b.disabled = true; });
-        try {
-          if (!mod && !(await load())) return say('Couldn\u2019t load the check (no connection?). Try again.');
-          say('Checking\u2026');
-          if (test) {
-            const r = await mod.testPasskeys({ log });
-            say(r.line, r.ok ? 'Nothing was sent. A \u201cPasskey test\u201d entry may remain in your Passwords app for this site; you can delete it there.' : 'Nothing was sent.');
-          } else say((await mod.detectPasskeys({ log })).summary.line);
-        } catch (e) { say(`The check itself failed: ${e?.name || 'Error'}: ${e?.message || ''}`); }
-        finally { busy = false; buttons.forEach((b) => { b.disabled = false; }); }
-      };
-      return h('details', { class: 'adv' }, h('summary', {}, 'Face ID / passkey support'),
-        h('div', { class: 'row stack' }, result, sub,
-          h('span', { class: 'row-sub' }, 'Experimental check for a possible future sign-in with Face ID. It changes nothing about how sync works today. Results also go to Settings \u2192 Advanced \u2192 log.')),
-        rowOf(...[btn('Check support', go(false)), btn('Test Face ID passkey', go(true))].map((b) => (buttons.push(b), b))));
-    };
     const off = sync.onStatus(paint), tick = setInterval(paint, 30000);
     ctx.signal.addEventListener('abort', () => { off(); clearInterval(tick); }, { once: true });
     if (!sync.hasHousehold()) sync.probe(); // sets "Sync not set up" when there is no server side
     paint();
-    return section('Sync', h('div', {}, body, probeSection()), { id: 'sync', note: 'Keeps this household’s profiles, beans and brews in step across devices. Works offline; changes sync when you are back online.' });
+    return section('Sync', body, { id: 'sync', note: 'Keeps this household’s profiles, beans and brews in step across devices. Works offline; changes sync when you are back online.' });
   },
 });

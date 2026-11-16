@@ -1,7 +1,11 @@
 # Passkeys (Face ID / Touch ID) for household sync: design
 
-Status: **stage 1 = probe + this document. Nothing here is implemented on the server yet.** Stage 2 starts only after the
-controller has reviewed this and the owner has reported the probe result from their iPhone/Bluefy.
+**Status: not pursued.** Tested Nov 2026: passkeys work in Safari but not in Bluefy (the only iPhone browser with Web Bluetooth), so
+they would not protect the owner's devices. Kept as a record of the design and of what was learned. The probe described below was
+removed again; nothing here is implemented. The real remaining gap is that a household code cannot be changed (a possible small
+future feature: "rotate code").
+
+(The rest of this document is written as it was before the result was known.)
 
 ## Stage 1: the probe (shipped with this document)
 
